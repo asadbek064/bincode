@@ -67,7 +67,7 @@ pnpm dev
 ```
 
 ### 5. Production
-Copy .env.example to .env and generate unique secret and cahnge NODE_ENV=production
+Copy .env.example to .env and generate unique secret and change NODE_ENV=production
 1. Copy .env.example to .env:
 ```bash
 cp .env.example .env
