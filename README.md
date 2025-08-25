@@ -20,7 +20,7 @@ BinCode is a minimalist platform for managing and sharing code snippets, built w
 - **Authentication:** JWT
 - **Deployment:** Single self-contained server.
 
-There is no signups its by design just create users manually and they can start commits snippets to share
+There is no signups its by design just create users manually and they can start commit snippets to share
 
 ## Why BinCode?
 
