@@ -13,6 +13,7 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.0",
     "jsonwebtoken": "^9.0.0",
+    "monaco-editor": "0.45.0",
     "nanoid": "^3.3.4",
     "sanitize-html": "^2.14.0",
     "sqlite3": "^5.1.6",
