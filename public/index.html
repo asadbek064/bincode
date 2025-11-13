@@ -23,27 +23,28 @@
           <input type="text" v-model="title" placeholder="Snippet title" />
         </div>
         <div class="toggle-container">
-          <button class="toggle-icon" @click="toggleEditor">
-            <span v-html="showEditor ? extraIcons[0].visible : extraIcons[1].hidden"></span>
+          <button class="toggle-icon" @click="toggleEditor" :title="showEditor ? 'Hide editor' : 'Show editor'">
+            <span v-html="showEditor ? icons.visible : icons.hidden"></span>
             <span>editor</span>
           </button>
 
-          <button class="toggle-icon" @click="togglePreview">
-            <span v-html="showPreview ? extraIcons[0].visible : extraIcons[1].hidden"></span>
+          <button class="toggle-icon" @click="togglePreview" :title="showPreview ? 'Hide preview' : 'Show preview'">
+            <span v-html="showPreview ? icons.visible : icons.hidden"></span>
             <span>preview</span>
           </button>
 
-          <button class="toggle-icon" @click="toggleConsole">
-            <span v-html="showConsole ? extraIcons[2].console : extraIcons[3].console_hiddne"></span>
+          <button class="toggle-icon" @click="toggleConsole" :title="showConsole ? 'Hide console' : 'Show console'">
+            <span v-html="showConsole ? icons.console : icons.console_hidden"></span>
             <span>console</span>
           </button>
-        
-          <button 
-            class="toggle-icon" 
+
+          <button
+            class="toggle-icon"
             @click="toggleExecution"
             :class="{ 'toggle-active': isExecutionPaused }"
+            :title="isExecutionPaused ? 'Resume live preview' : 'Pause live preview'"
           >
-            <span v-html="isExecutionPaused ? playIcon : pauseIcon"></span>
+            <span v-html="isExecutionPaused ? icons.play : icons.pause"></span>
             <span>{{ isExecutionPaused ? 'live' : 'pause' }}</span>
           </button>
         </div>
@@ -52,7 +53,9 @@
             <button @click="showLogin = true">Login</button>
           </div>
           <div class="user-menu" v-else>
-            <button @click="saveSnippet" class="primary">Save</button>
+            <button @click="saveSnippet" class="primary" :disabled="isSaving">
+              {{ isSaving ? 'Saving...' : 'Save' }}
+            </button>
             <button @click="logout">Logout</button>
           </div>
         </div>
@@ -140,18 +143,29 @@
               v-model="loginEmail"
               placeholder="Email"
               required
+              :disabled="isLoggingIn"
             />
             <input
               type="password"
               v-model="loginPassword"
               placeholder="Password"
               required
+              :disabled="isLoggingIn"
             />
-            <button type="submit" class="primary">Login</button>
+            <button type="submit" class="primary" :disabled="isLoggingIn">
+              {{ isLoggingIn ? 'Logging in...' : 'Login' }}
+            </button>
           </form>
           <button class="close" @click="showLogin = false">&times;</button>
         </div>
       </div>
+
+      <!-- Toast Notification -->
+      <transition name="toast">
+        <div v-if="toast.show" class="toast" :class="`toast-${toast.type}`">
+          {{ toast.message }}
+        </div>
+      </transition>
     </div>
 
     <!-- use`_dev` or `_prod` lib for vuejs based on env -->

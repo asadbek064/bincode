@@ -5,11 +5,14 @@ Prism.manual = true;
 createApp({
   data() {
     return {
+      // ==================== Authentication ====================
       token: localStorage.getItem("token"),
       showLogin: false,
-      showShareModal: false,
       loginEmail: "",
       loginPassword: "",
+      isLoggingIn: false,
+
+      // ==================== Snippet Data ====================
       title: "",
       html: `<!DOCTYPE html>
 <html>
@@ -25,16 +28,14 @@ createApp({
       `,
       css: "",
       js: "",
+
+      // ==================== Share Modal ====================
+      showShareModal: false,
       shareUrl: "",
       currentShareId: null,
-      isDragging: false,
-      startX: null,
-      startWidth: null,
-      containerWidth: null,
-      editorWidth: "50%",
-      minWidth: 250,
-      maxWidth: null,
-      // Tab state
+      isSaving: false,
+
+      // ==================== Editor State ====================
       activeTab: "html",
       tabs: [
         {
@@ -56,38 +57,44 @@ createApp({
           language: "javascript",
         },
       ],
-      extraIcons: [
-        {
-          visible: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z"/></svg>`,
-        },
-        {
-          hidden: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z"/></svg>`,
-        },
-        {
-          console: `
-          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H160v400Zm140-40-56-56 103-104-104-104 57-56 160 160-160 160Zm180 0v-80h240v80H480Z"/></svg>`,
-        },
-        {
-          console_hiddne: `
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M4 20C3.45 20 2.97917 19.8042 2.5875 19.4125C2.19583 19.0208 2 18.55 2 18V6C2 5.45 2.19583 4.97917 2.5875 4.5875C2.97917 4.19583 3.45 4 4 4H20C20.55 4 21.0208 4.19583 21.4125 4.5875C21.8042 4.97917 22 5.45 22 6V18C22 18.55 21.8042 19.0208 21.4125 19.4125C21.0208 19.8042 20.55 20 20 20H4ZM4 18H20V8H4V18ZM7.5 17L6.1 15.6L8.675 13L6.075 10.4L7.5 9L11.5 13L7.5 17ZM12 17V15H18V17H12Z" fill="#5F6368"/>
-<rect x="3.43359" y="2" width="26.3532" height="2" transform="rotate(45.8073 3.43359 2)" fill="#5F6368"/>
-</svg>
-`,
-        },
-      ],
       highlightedCode: {
         html: "",
         css: "",
         js: "",
       },
+
+      // ==================== View State ====================
       showEditor: true,
       showPreview: true,
-      isExecutionPaused: false,
-      updateTimer: null,
       showConsole: true,
-      playIcon: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M320-200v-560l440 280-440 280Zm80-280Zm0 134 210-134-210-134v268Z"/></svg>`,
-      pauseIcon: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M520-200v-560h240v560H520Zm-320 0v-560h240v560H200Zm400-80h80v-400h-80v400Zm-320 0h80v-400h-80v400Zm320-400Zm-320 0Z"/></svg>`,
+      isExecutionPaused: false,
+
+      // ==================== Panel Resize State ====================
+      isDragging: false,
+      startX: null,
+      startWidth: null,
+      containerWidth: null,
+      editorWidth: "50%",
+      minWidth: 250,
+      maxWidth: null,
+
+      // ==================== UI State ====================
+      updateTimer: null,
+      toast: {
+        show: false,
+        message: "",
+        type: "success", // success, error, info
+      },
+
+      // ==================== Icons ====================
+      icons: {
+        visible: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z"/></svg>`,
+        hidden: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z"/></svg>`,
+        console: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#5f6368"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H160v400Zm140-40-56-56 103-104-104-104 57-56 160 160-160 160Zm180 0v-80h240v80H480Z"/></svg>`,
+        console_hidden: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 20C3.45 20 2.97917 19.8042 2.5875 19.4125C2.19583 19.0208 2 18.55 2 18V6C2 5.45 2.19583 4.97917 2.5875 4.5875C2.97917 4.19583 3.45 4 4 4H20C20.55 4 21.0208 4.19583 21.4125 4.5875C21.8042 4.97917 22 5.45 22 6V18C22 18.55 21.8042 19.0208 21.4125 19.4125C21.0208 19.8042 20.55 20 20 20H4ZM4 18H20V8H4V18ZM7.5 17L6.1 15.6L8.675 13L6.075 10.4L7.5 9L11.5 13L7.5 17ZM12 17V15H18V17H12Z" fill="#5F6368"/><rect x="3.43359" y="2" width="26.3532" height="2" transform="rotate(45.8073 3.43359 2)" fill="#5F6368"/></svg>`,
+        play: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M320-200v-560l440 280-440 280Zm80-280Zm0 134 210-134-210-134v268Z"/></svg>`,
+        pause: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M520-200v-560h240v560H520Zm-320 0v-560h240v560H200Zm400-80h80v-400h-80v400Zm-320 0h80v-400h-80v400Zm320-400Zm-320 0Z"/></svg>`,
+      },
     };
   },
 
@@ -144,7 +151,10 @@ createApp({
   },
 
   created() {
-    this.updatePreviewDebounced = this.debounce(this.updatePreview, 50);
+    // Consistent debounce timing for preview updates
+    this.updatePreviewDebounced = this.debounce(this.updatePreview, 500);
+
+    // Load shared snippet if share parameter exists
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get("share");
     if (shareId) {
@@ -185,29 +195,42 @@ createApp({
   },
 
   methods: {
+    // ==================== Toast Notifications ====================
+    showToast(message, type = "success") {
+      this.toast.message = message;
+      this.toast.type = type;
+      this.toast.show = true;
+
+      setTimeout(() => {
+        this.toast.show = false;
+      }, 3000);
+    },
+
+    // ==================== Paste and Scroll Handling ====================
     handlePaste(event) {
       const textarea = event.target;
-      
-      // scroll to cursor
+
+      // Scroll to cursor position after paste
       requestAnimationFrame(() => {
         this.scrollToCursor(textarea);
       });
     },
+
     scrollToCursor(textarea) {
       const cursorPosition = textarea.selectionStart;
-  
       const lineHeight = parseInt(getComputedStyle(textarea).lineHeight, 10);
       const lines = textarea.value.substr(0, cursorPosition).split('\n').length;
-  
       const scrollTop = (lines - 1) * lineHeight;
-  
+
       textarea.scrollTop = scrollTop;
-  
+
       const pre = textarea.nextElementSibling;
       if (pre) {
         pre.scrollTop = scrollTop;
       }
     },
+
+    // ==================== Theme Management ====================
     loadPrismTheme() {
       const existingTheme = document.querySelector("link[data-prism-theme]");
       if (existingTheme) {
@@ -259,6 +282,7 @@ createApp({
       this.showConsole = !this.showConsole;
       this.updatePreview();
     },
+    // ==================== Preview Management ====================
     schedulePreviewUpdate() {
       if (this.updateTimer) {
         clearTimeout(this.updateTimer);
@@ -271,10 +295,10 @@ createApp({
       }
     },
 
+    // ==================== View Toggles ====================
     toggleExecution() {
       this.isExecutionPaused = !this.isExecutionPaused;
       if (!this.isExecutionPaused) {
-        // resume execution
         this.updatePreview();
       }
     },
@@ -282,6 +306,7 @@ createApp({
     toggleEditor() {
       this.showEditor = !this.showEditor;
     },
+
     togglePreview() {
       this.showPreview = !this.showPreview;
       if (!this.showPreview) {
@@ -290,6 +315,7 @@ createApp({
         this.editorWidth = "50%";
       }
     },
+    // ==================== Syntax Highlighting ====================
     highlightCode(code, tab) {
       const languageMap = {
         html: "markup",
@@ -300,7 +326,7 @@ createApp({
       const language = languageMap[tab];
       if (!language) return;
 
-      // run highlighting in a requestAnimationFrame to avoid blocking the main thread
+      // Run highlighting in requestAnimationFrame to avoid blocking the main thread
       requestAnimationFrame(() => {
         try {
           this.highlightedCode[tab] = Prism.highlight(
@@ -314,6 +340,8 @@ createApp({
         }
       });
     },
+
+    // ==================== Editor Interaction ====================
     handleKeydown(event) {
       if (event.key === "Tab") {
         event.preventDefault();
@@ -354,8 +382,9 @@ createApp({
       };
     },
 
+    // ==================== Keyboard Shortcuts ====================
     handleKeyboardShortcuts(e) {
-      // handle Ctrl/Cmd + number for tab switching
+      // Ctrl/Cmd + number for tab switching
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= this.tabs.length) {
@@ -364,13 +393,14 @@ createApp({
         }
       }
 
-      // handle Ctrl/Cmd + S for save
+      // Ctrl/Cmd + S for save
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         this.saveSnippet();
       }
     },
 
+    // ==================== Panel Layout ====================
     initializeLayout() {
       const container = document.querySelector(".editor-container");
       this.containerWidth = container.offsetWidth;
@@ -388,6 +418,8 @@ createApp({
         preview.style.width = this.previewWidth;
       }
     },
+
+    // ==================== Panel Resize ====================
 
     startResize(event) {
       event.preventDefault();
@@ -521,7 +553,9 @@ createApp({
       });
     },
 
+    // ==================== Authentication ====================
     async login() {
+      this.isLoggingIn = true;
       try {
         const response = await fetch("/api/auth/login", {
           method: "POST",
@@ -532,28 +566,38 @@ createApp({
           }),
         });
 
-        if (!response.ok) throw new Error("Login failed");
+        if (!response.ok) {
+          throw new Error("Login failed");
+        }
 
         const data = await response.json();
         this.token = data.token;
         localStorage.setItem("token", data.token);
         this.showLogin = false;
+        this.loginEmail = "";
+        this.loginPassword = "";
+        this.showToast("Login successful!", "success");
       } catch (error) {
-        alert("Login failed");
+        this.showToast("Login failed. Please check your credentials.", "error");
+      } finally {
+        this.isLoggingIn = false;
       }
     },
 
     logout() {
       this.token = null;
       localStorage.removeItem("token");
+      this.showToast("Logged out successfully", "info");
     },
 
+    // ==================== Snippet Management ====================
     async saveSnippet() {
       if (!this.token) {
         this.showLogin = true;
         return;
       }
 
+      this.isSaving = true;
       try {
         const response = await fetch("/api/snippets", {
           method: "POST",
@@ -569,21 +613,28 @@ createApp({
           }),
         });
 
-        if (!response.ok) throw new Error("Failed to save snippet");
+        if (!response.ok) {
+          throw new Error("Failed to save snippet");
+        }
 
         const data = await response.json();
         this.currentShareId = data.shareId;
         this.shareUrl = `${window.location.origin}/?share=${data.shareId}`;
         this.showShareModal = true;
+        this.showToast("Snippet saved successfully!", "success");
       } catch (error) {
-        alert("Failed to save snippet");
+        this.showToast("Failed to save snippet. Please try again.", "error");
+      } finally {
+        this.isSaving = false;
       }
     },
 
     async loadSharedSnippet(shareId) {
       try {
         const response = await fetch(`/api/snippets/share/${shareId}`);
-        if (!response.ok) throw new Error("Failed to load snippet");
+        if (!response.ok) {
+          throw new Error("Failed to load snippet");
+        }
 
         const data = await response.json();
         this.title = data.title;
@@ -592,18 +643,19 @@ createApp({
         this.js = data.js;
 
         this.rehighlightCode();
-
         this.updatePreview();
+        this.showToast("Snippet loaded successfully!", "success");
       } catch (error) {
-        alert("Failed to load shared snippet");
+        this.showToast("Failed to load shared snippet", "error");
       }
     },
 
     async copyShareUrl() {
       try {
         await navigator.clipboard.writeText(this.shareUrl);
+        this.showToast("Link copied to clipboard!", "success");
       } catch (error) {
-        alert("Failed to copy URL");
+        this.showToast("Failed to copy link. Please copy manually.", "error");
       }
     },
 
