@@ -244,6 +244,14 @@ nav {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Ensure Monaco editor is interactive */
+.monaco-editor {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* Override Monaco Editor default styles to match theme */

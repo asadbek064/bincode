@@ -67,6 +67,7 @@ require(['vs/editor/editor.main'], function () {
           css: null,
           js: null,
         },
+        isDarkMode: false,
 
         // ==================== View State ====================
         showEditor: true,
@@ -172,10 +173,12 @@ require(['vs/editor/editor.main'], function () {
       this.initializeLayout();
       document.addEventListener("keydown", this.handleKeyboardShortcuts);
 
-      // Initialize Monaco editors
-      this.$nextTick(() => {
-        this.initializeMonacoEditors();
-      });
+      // Initialize Monaco editors - give it time to load
+      setTimeout(() => {
+        this.$nextTick(() => {
+          this.initializeMonacoEditors();
+        });
+      }, 100);
 
       // Listen for window resize to layout editors
       window.addEventListener("resize", () => {
@@ -196,7 +199,10 @@ require(['vs/editor/editor.main'], function () {
       // ==================== Monaco Editor Setup ====================
       initializeMonacoEditors() {
         const editorContainer = this.$refs.monacoEditor;
-        if (!editorContainer) return;
+        if (!editorContainer) {
+          console.error("Monaco editor container not found");
+          return;
+        }
 
         const theme = this.isDarkMode ? "vs-dark" : "vs";
 
@@ -209,7 +215,7 @@ require(['vs/editor/editor.main'], function () {
           scrollBeyondLastLine: false,
           wordWrap: "on",
           wrappingStrategy: "advanced",
-          automaticLayout: true,
+          automaticLayout: false, // We'll handle layout manually
           tabSize: 2,
           insertSpaces: true,
           formatOnPaste: true,
@@ -233,6 +239,15 @@ require(['vs/editor/editor.main'], function () {
           this.editors[tab.id].onDidChangeModelContent(() => {
             this[tab.id] = this.editors[tab.id].getValue();
           });
+        });
+
+        // Initial layout after creation
+        this.$nextTick(() => {
+          this.layoutEditors();
+          // Focus the active editor
+          if (this.editors[this.activeTab]) {
+            this.editors[this.activeTab].focus();
+          }
         });
       },
 
