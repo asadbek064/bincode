@@ -153,10 +153,18 @@
     <!-- use`_dev` or `_prod` lib for vuejs based on env -->
     <script src="./libraries/vue/vuejs_3.5.13_prod.js"></script>
 
-    <!-- Monaco Editor loader -->
-    <script src="./libraries/monaco-editor/vs/loader.js"></script>
+    <!-- Monaco Editor - load CSS first -->
+    <link rel="stylesheet" href="./libraries/monaco-editor/vs/editor/editor.main.css" />
 
-    <!-- Main app -->
+    <!-- Monaco Editor loader and main -->
+    <script>
+      var require = { paths: { vs: './libraries/monaco-editor/vs' } };
+    </script>
+    <script src="./libraries/monaco-editor/vs/loader.js"></script>
+    <script src="./libraries/monaco-editor/vs/editor/editor.main.nls.js"></script>
+    <script src="./libraries/monaco-editor/vs/editor/editor.main.js"></script>
+
+    <!-- Main app - loads after Monaco is ready -->
     <script src="/app.js"></script>
   </body>
 </html>

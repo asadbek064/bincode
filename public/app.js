@@ -1,9 +1,14 @@
-// Configure Monaco Editor loader
-require.config({ paths: { vs: '/libraries/monaco-editor/vs' } });
+const { createApp } = Vue;
 
-// Wait for Monaco to load before creating Vue app
-require(['vs/editor/editor.main'], function () {
-  const { createApp } = Vue;
+// Wait for Monaco Editor to be available
+function initApp() {
+  if (typeof monaco === 'undefined') {
+    console.log('Waiting for Monaco Editor to load...');
+    setTimeout(initApp, 100);
+    return;
+  }
+
+  console.log('Monaco Editor loaded, initializing app...');
 
   createApp({
     data() {
@@ -89,7 +94,7 @@ require(['vs/editor/editor.main'], function () {
         toast: {
           show: false,
           message: "",
-          type: "success", // success, error, info
+          type: "success",
         },
 
         // ==================== Icons ====================
@@ -131,27 +136,18 @@ require(['vs/editor/editor.main'], function () {
     },
 
     watch: {
-      html: {
-        handler() {
-          this.schedulePreviewUpdate();
-        },
+      html() {
+        this.schedulePreviewUpdate();
       },
-      css: {
-        handler() {
-          this.schedulePreviewUpdate();
-        },
+      css() {
+        this.schedulePreviewUpdate();
       },
-      js: {
-        handler() {
-          this.schedulePreviewUpdate();
-        },
+      js() {
+        this.schedulePreviewUpdate();
       },
     },
 
     created() {
-      // Consistent debounce timing for preview updates
-      this.updatePreviewDebounced = this.debounce(this.updatePreview, 500);
-
       // Load shared snippet if share parameter exists
       const urlParams = new URLSearchParams(window.location.search);
       const shareId = urlParams.get("share");
@@ -173,14 +169,12 @@ require(['vs/editor/editor.main'], function () {
       this.initializeLayout();
       document.addEventListener("keydown", this.handleKeyboardShortcuts);
 
-      // Initialize Monaco editors - give it time to load
+      // Initialize Monaco editors after a short delay
       setTimeout(() => {
-        this.$nextTick(() => {
-          this.initializeMonacoEditors();
-        });
-      }, 100);
+        this.initializeMonacoEditors();
+      }, 200);
 
-      // Listen for window resize to layout editors
+      // Listen for window resize
       window.addEventListener("resize", () => {
         this.layoutEditors();
       });
@@ -200,10 +194,11 @@ require(['vs/editor/editor.main'], function () {
       initializeMonacoEditors() {
         const editorContainer = this.$refs.monacoEditor;
         if (!editorContainer) {
-          console.error("Monaco editor container not found");
+          console.error("Monaco editor container not found!");
           return;
         }
 
+        console.log("Initializing Monaco editors...");
         const theme = this.isDarkMode ? "vs-dark" : "vs";
 
         // Common editor options
@@ -215,7 +210,7 @@ require(['vs/editor/editor.main'], function () {
           scrollBeyondLastLine: false,
           wordWrap: "on",
           wrappingStrategy: "advanced",
-          automaticLayout: false, // We'll handle layout manually
+          automaticLayout: false,
           tabSize: 2,
           insertSpaces: true,
           formatOnPaste: true,
@@ -241,23 +236,19 @@ require(['vs/editor/editor.main'], function () {
           });
         });
 
-        // Initial layout after creation
+        // Layout and focus after creation
         this.$nextTick(() => {
           this.layoutEditors();
-          // Focus the active editor
           if (this.editors[this.activeTab]) {
             this.editors[this.activeTab].focus();
           }
+          console.log("Monaco editors initialized successfully!");
         });
       },
 
       updateEditorThemes() {
         const theme = this.isDarkMode ? "vs-dark" : "vs";
-        Object.values(this.editors).forEach((editor) => {
-          if (editor) {
-            monaco.editor.setTheme(theme);
-          }
-        });
+        monaco.editor.setTheme(theme);
       },
 
       layoutEditors() {
@@ -298,14 +289,10 @@ require(['vs/editor/editor.main'], function () {
         const preview = document.getElementById("preview-frame");
         if (!preview) return;
 
-        // Create a new iframe to replace the existing one
         const newFrame = document.createElement("iframe");
         newFrame.id = "preview-frame";
-
-        // Replace the old frame with the new one
         preview.parentNode.replaceChild(newFrame, preview);
 
-        // Write content to the new frame
         const doc = newFrame.contentDocument;
         doc.open();
 
@@ -314,7 +301,6 @@ require(['vs/editor/editor.main'], function () {
         <html>
           <head>
             <style>${this.css || ""}</style>
-            <!-- Eruda console for debugging -->
             <script src="/libraries/eruda/eruda.min.js"></script>
           </head>
           <body>
@@ -329,7 +315,6 @@ require(['vs/editor/editor.main'], function () {
                   transparency: 0.9,
                   theme: 'Monokai Pro'
               }
-
               });
               eruda.show();
               </script>`
@@ -393,7 +378,6 @@ require(['vs/editor/editor.main'], function () {
             container.style.display = tab.id === tabId ? "block" : "none";
 
             if (tab.id === tabId) {
-              // Focus and layout the active editor
               editor.focus();
               editor.layout();
             }
@@ -536,7 +520,6 @@ require(['vs/editor/editor.main'], function () {
         const container = document.querySelector(".editor-container");
         this.containerWidth = container.offsetWidth;
         this.maxWidth = this.containerWidth - this.minWidth;
-
         this.updateLayout();
       },
 
@@ -549,7 +532,6 @@ require(['vs/editor/editor.main'], function () {
           preview.style.width = this.previewWidth;
         }
 
-        // Layout Monaco editors after resize
         this.$nextTick(() => {
           this.layoutEditors();
         });
@@ -559,22 +541,16 @@ require(['vs/editor/editor.main'], function () {
       startResize(event) {
         event.preventDefault();
         this.isDragging = true;
-
-        // Get clientX from either mouse or touch event
-        this.startX =
-          event.clientX || (event.touches && event.touches[0].clientX);
+        this.startX = event.clientX || (event.touches && event.touches[0].clientX);
 
         const editorGroup = document.querySelector(".editor-group");
         this.startWidth = editorGroup.offsetWidth;
 
         this.toggleIframe("none");
-
         document.body.classList.add("resizing");
 
         document.addEventListener("mousemove", this.onMouseMove);
-        document.addEventListener("touchmove", this.onTouchMove, {
-          passive: false,
-        });
+        document.addEventListener("touchmove", this.onTouchMove, { passive: false });
         document.addEventListener("mouseup", this.onMouseUp);
         document.addEventListener("touchend", this.onTouchEnd);
       },
@@ -586,10 +562,7 @@ require(['vs/editor/editor.main'], function () {
 
       onTouchMove(event) {
         if (!this.isDragging) return;
-
-        // Prevents scrolling during resize on touch devices
         event.preventDefault();
-
         if (event.touches && event.touches[0]) {
           this.processMove(event.touches[0].clientX);
         }
@@ -614,20 +587,16 @@ require(['vs/editor/editor.main'], function () {
 
         this.isDragging = false;
         document.body.classList.remove("resizing");
-
         this.toggleIframe("auto");
 
-        // Remove both mouse and touch event listeners
         document.removeEventListener("mousemove", this.onMouseMove);
         document.removeEventListener("touchmove", this.onTouchMove);
         document.removeEventListener("mouseup", this.onMouseUp);
         document.removeEventListener("touchend", this.onTouchEnd);
 
-        // Layout editors after resize
         this.layoutEditors();
       },
 
-      /**@param {"auto" | "none"} setting */
       toggleIframe(setting) {
         const iframe = document.getElementById("preview-frame");
         if (!iframe) return;
@@ -644,4 +613,7 @@ require(['vs/editor/editor.main'], function () {
       },
     },
   }).mount("#app");
-});
+}
+
+// Start initialization
+initApp();
