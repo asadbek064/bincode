@@ -34,4 +34,61 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco });
 
+export const LIGHT_THEME = 'bincode-light';
+export const DARK_THEME = 'bincode-dark';
+
+let themesDefined = false;
+
+/**
+ * Registers our themes on the bundled monaco instance (the one handed to the loader
+ * above, so <Editor> sees them). Runs at module load; the guard makes repeat calls
+ * (e.g. from beforeMount) free.
+ */
+export function defineThemes(): void {
+  if (themesDefined) return;
+  themesDefined = true;
+  // Theme rules match token prefixes, so 'tag' covers 'tag.html' and the CSS
+  // selectors ('tag.css'); 'string' covers 'string.js' / 'string.css'. HTML
+  // attribute values are 'attribute.value.html' (quotes included), but CSS also
+  // uses 'attribute.value.css' for property values, so only the HTML one is green.
+  monaco.editor.defineTheme(LIGHT_THEME, {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: '', foreground: '334155' },
+      { token: 'tag', foreground: '1D4ED8' },
+      { token: 'metatag', foreground: '1D4ED8' },
+      { token: 'metatag.content', foreground: '1D4ED8' },
+      { token: 'attribute.name', foreground: '4338CA' },
+      { token: 'attribute.value.html', foreground: '047857' },
+      { token: 'string', foreground: '047857' },
+    ],
+    colors: {
+      'editor.background': '#FFFFFF',
+      'editor.foreground': '#334155',
+      'editorLineNumber.foreground': '#94A3B8',
+      'editorLineNumber.activeForeground': '#334155',
+      'editor.lineHighlightBackground': '#F8FAFC',
+      'editor.lineHighlightBorder': '#F8FAFC',
+      'editorGutter.background': '#FFFFFF',
+    },
+  });
+  // vs-dark tokens with the app's slate surfaces, so the editor doesn't sit in a grey box in dark mode.
+  monaco.editor.defineTheme(DARK_THEME, {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#0F172A',
+      'editorGutter.background': '#0F172A',
+      'editorLineNumber.foreground': '#475569',
+      'editorLineNumber.activeForeground': '#CBD5E1',
+      'editor.lineHighlightBackground': '#1E293B',
+      'editor.lineHighlightBorder': '#1E293B',
+    },
+  });
+}
+
+defineThemes();
+
 export { monaco };

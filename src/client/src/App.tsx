@@ -3,12 +3,11 @@ import type { ReactNode } from 'react';
 import type { LockedSnippet, Snippet, SnippetInput, UnlockSnippetResponse } from '../../shared/api.ts';
 import { DEFAULT_TITLE } from '../../shared/constants.ts';
 import { BinGate } from './components/BinGate.tsx';
-import { BinSettings } from './components/BinSettings.tsx';
 import { CollectionView } from './components/CollectionView.tsx';
+import { ConsoleDrawer } from './components/ConsoleDrawer.tsx';
 import { DraftBanner } from './components/DraftBanner.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
 import { PreviewPane } from './components/PreviewPane.tsx';
-import { ShareModal } from './components/ShareModal.tsx';
 import { SnippetsDashboard } from './components/SnippetsDashboard.tsx';
 import { SplitPane } from './components/SplitPane.tsx';
 import { Toast } from './components/Toast.tsx';
@@ -16,12 +15,14 @@ import type { ToastMessage } from './components/Toast.tsx';
 import { Toolbar } from './components/Toolbar.tsx';
 import { useAuth } from './hooks/useAuth.tsx';
 import { useColorScheme } from './hooks/useColorScheme.ts';
+import { useConsoleLog } from './hooks/useConsoleLog.ts';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.ts';
 import { useLocalDraft } from './hooks/useLocalDraft.ts';
 import { CODE_FIELDS, toCurrent, useSnippetEditor } from './hooks/useSnippetEditor.ts';
 import type { CodeField } from './hooks/useSnippetEditor.ts';
 import * as api from './lib/api.ts';
 import { ApiError } from './lib/api.ts';
+import { copyText } from './lib/clipboard.ts';
 import { DEFAULT_PENDING, pendingToInput, type PendingSettings } from './lib/binSettings.ts';
 import { forgetUnlockToken, getUnlockToken, saveUnlockToken } from './lib/unlockTokens.ts';
 import { onShareIdChange, pushShareId, readCollectionId, readShareId, replaceShareId, shareUrl } from './lib/url.ts';
@@ -31,9 +32,7 @@ const EditorPane = lazy(() => import('./components/EditorPane.tsx'));
 
 type ModalState =
   | { type: 'login' }
-  | { type: 'share'; snippet: Snippet }
   | { type: 'snippets' }
-  | { type: 'settings' }
   | { type: 'collection'; shareId: string }
   | null;
 
@@ -79,6 +78,9 @@ export function App() {
   const [loading, setLoading] = useState(false);
   // Settings for a bin that hasn't been saved yet. Kept out of the editor state so they never reach drafts.
   const [pending, setPending] = useState<PendingSettings>(DEFAULT_PENDING);
+  const consoleLog = useConsoleLog();
+  // Bumped to force a fresh preview run (Cmd/Ctrl+Enter), even when the code is unchanged or paused.
+  const [runId, setRunId] = useState(0);
   const [view, setView] = useState<View>(() => (readShareId() || readCollectionId() ? 'blank' : 'editor'));
 
   const stateRef = useRef(state);
@@ -186,14 +188,18 @@ export function App() {
     document.title = `${state.title.trim() || DEFAULT_TITLE} - BinCode`;
   }, [state.title]);
 
+  /**
+   * Saves the open bin and resolves to its shareId (null when nothing was saved). `fromShare` means the
+   * Share popover copies the link itself; otherwise a newly created bin's link is copied here.
+   */
   const save = useCallback(
-    async (forceFork = false) => {
+    async (forceFork = false, fromShare = false): Promise<string | null> => {
       // Nothing to save on a locked, missing or loading bin (and the blank editor must never become a bin).
-      if (savingRef.current || viewRef.current !== 'editor') return;
+      if (savingRef.current || viewRef.current !== 'editor') return null;
       if (!api.getAuthToken()) {
-        afterLogin.current = () => void save(forceFork);
+        afterLogin.current = () => void save(forceFork, fromShare);
         setModal({ type: 'login' });
-        return;
+        return null;
       }
       const s = stateRef.current;
       const sent: SnippetInput = { title: s.title, html: s.html, css: s.css, js: s.js };
@@ -206,6 +212,7 @@ export function App() {
           dispatch({ type: 'saved', snippet, sent });
           drafts.clear(current.shareId);
           notify('success', 'Saved');
+          return snippet.shareId;
         } else {
           // Leave the title out of an unrenamed fork so the server names it "… (fork)".
           const forkInput = current && s.title === current.title ? { html: s.html, css: s.css, js: s.js } : sent;
@@ -221,7 +228,11 @@ export function App() {
             const added = await Promise.allSettled(chosen.collections.map((c) => api.addToCollection(c, snippet.shareId)));
             if (added.some((r) => r.status === 'rejected')) notify('error', 'Saved, but adding it to a collection failed.');
           }
-          setModal({ type: 'share', snippet });
+          if (!fromShare) {
+            const copied = await copyText(shareUrl(snippet.shareId));
+            notify('success', copied ? 'Saved. Link copied to clipboard!' : 'Saved.');
+          }
+          return snippet.shareId;
         }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
@@ -235,6 +246,7 @@ export function App() {
         } else {
           notify('error', `Save failed: ${errorMessage(err, 'unknown error')}`);
         }
+        return null;
       } finally {
         savingRef.current = false;
         setSaving(false);
@@ -242,6 +254,18 @@ export function App() {
     },
     [dispatch, drafts, notify],
   );
+
+  // Share's "Save & copy link": its chosen settings must reach save() now, not after the next render.
+  const saveAndCopy = useCallback(
+    (settings: PendingSettings) => {
+      pendingRef.current = settings;
+      setPending(settings);
+      return save(false, true);
+    },
+    [save],
+  );
+
+  const rerun = useCallback(() => setRunId((n) => n + 1), []);
 
   const onLoginSuccess = useCallback(async () => {
     setModal(null);
@@ -358,6 +382,9 @@ export function App() {
     onSave: () => {
       if (!modal) void save();
     },
+    onRun: () => {
+      if (viewRef.current === 'editor') rerun();
+    },
     onTab: (index) => {
       const tab = CODE_FIELDS[index];
       if (tab && !modal) selectTab(tab);
@@ -380,12 +407,22 @@ export function App() {
         onTitleChange={(title) => onEdit('title', title)}
         dirty={state.dirty}
         saveMode={saveMode}
+        saved={!!current}
         canFork={!!current?.isOwner}
         locked={view !== 'editor'}
         lockedTitle={typeof view === 'object' && 'locked' in view ? view.locked.title : null}
-        visibility={current ? current.visibility : pending.visibility}
-        canEditSettings={!!user && (!current || current.isOwner)}
-        onOpenSettings={() => setModal({ type: 'settings' })}
+        consoleCount={consoleLog.counts.all}
+        consoleErrors={consoleLog.counts.error}
+        share={{
+          shareId: current?.shareId ?? null,
+          isOwner: !!current?.isOwner,
+          visibility: current ? current.visibility : pending.visibility,
+          pending,
+          onPendingChange: setPending,
+          onSaveAndCopy: saveAndCopy,
+          onApplied: onSettingsApplied,
+          notify,
+        }}
         saving={saving}
         showEditor={showEditor}
         showPreview={showPreview}
@@ -453,15 +490,33 @@ export function App() {
                     values={code}
                     onChange={onEdit}
                     onSave={() => void save()}
+                    onRun={rerun}
                     dark={dark}
                   />
                 </Suspense>
               </EditorErrorBoundary>
             }
-            second={<PreviewPane code={code} console={showConsole} paused={paused} />}
+            second={
+              <PreviewPane
+                code={code}
+                paused={paused}
+                runId={runId}
+                onConsole={consoleLog.push}
+                onRun={consoleLog.clear}
+              />
+            }
           />
         )}
       </main>
+
+      {view === 'editor' && showConsole && (
+        <ConsoleDrawer
+          entries={consoleLog.entries}
+          counts={consoleLog.counts}
+          onClear={consoleLog.clear}
+          onClose={() => setShowConsole(false)}
+        />
+      )}
 
       {modal?.type === 'login' && (
         <LoginModal
@@ -472,28 +527,6 @@ export function App() {
           onSuccess={() => void onLoginSuccess()}
         />
       )}
-      {modal?.type === 'share' && (
-        <ShareModal
-          url={shareUrl(modal.snippet.shareId)}
-          visibility={modal.snippet.visibility}
-          burnAfterRead={modal.snippet.burnAfterRead}
-          onClose={() => setModal(null)}
-        />
-      )}
-      {modal?.type === 'settings' &&
-        (current?.isOwner ? (
-          <BinSettings
-            mode="saved"
-            shareId={current.shareId}
-            onApplied={(snippet) => {
-              onSettingsApplied(snippet);
-              notify('success', 'Settings saved');
-            }}
-            onClose={() => setModal(null)}
-          />
-        ) : (
-          <BinSettings mode="new" pending={pending} onPendingChange={setPending} onClose={() => setModal(null)} />
-        ))}
       {modal?.type === 'collection' && (
         <CollectionView key={modal.shareId} shareId={modal.shareId} onOpen={navigateTo} onClose={closeCollection} />
       )}

@@ -15,9 +15,25 @@ import { relativeTime } from '../lib/time.ts';
 import { Modal } from './Modal.tsx';
 
 /** A saved bin applies changes at once (code and unsaved edits are untouched); a new one keeps them for its first save. */
-export type BinSettingsProps =
-  | { mode: 'saved'; shareId: string; onApplied: (snippet: Snippet) => void; onClose: () => void }
-  | { mode: 'new'; pending: PendingSettings; onPendingChange: (pending: PendingSettings) => void; onClose: () => void };
+type ModeProps =
+  | { mode: 'saved'; shareId: string; onApplied: (snippet: Snippet) => void }
+  | { mode: 'new'; pending: PendingSettings; onPendingChange: (pending: PendingSettings) => void };
+
+export type BinSettingsFormProps = ModeProps & {
+  /** defaults to 'Apply' (saved) / 'Done' (new) */
+  submitLabel?: string;
+  /** label while submitting; defaults to 'Saving…' */
+  busyLabel?: string;
+  /**
+   * Runs after a successful submit (after onApplied / onPendingChange). The button stays busy while
+   * its promise is pending; a rejection is shown as the form error.
+   */
+  onSubmitted?: () => void | Promise<void>;
+  /** focus the password field when it appears (off inside popovers, which focus their first control) */
+  autoFocusPassword?: boolean;
+};
+
+export type BinSettingsProps = ModeProps & { onClose: () => void };
 
 /** 'keep' leaves a saved bin's current expiry alone. */
 type LifetimeChoice = Lifetime | 'keep';
@@ -29,7 +45,8 @@ type LoadState =
 
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-export function BinSettings(props: BinSettingsProps) {
+/** The settings form on its own, for inline use (the Share popover); `BinSettings` wraps it in a modal. */
+export function BinSettingsForm(props: BinSettingsFormProps) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [visibility, setVisibility] = useState<Visibility>(props.mode === 'new' ? props.pending.visibility : 'unlisted');
   const [password, setPassword] = useState(props.mode === 'new' ? props.pending.password : '');
@@ -42,7 +59,9 @@ export function BinSettings(props: BinSettingsProps) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([shareId ? api.getOwnSnippet(shareId) : Promise.resolve(null), api.listCollections()])
+    // Logged out (a new bin's settings before login-then-save): collections need an account, so skip them.
+    const listing = api.getAuthToken() ? api.listCollections() : Promise.resolve({ collections: [] });
+    Promise.all([shareId ? api.getOwnSnippet(shareId) : Promise.resolve(null), listing])
       .then(([snippet, list]) => {
         if (cancelled) return;
         if (snippet) {
@@ -102,27 +121,31 @@ export function BinSettings(props: BinSettingsProps) {
         lifetime: lifetime === 'keep' ? 'never' : lifetime,
         collections: [...members],
       });
-      props.onClose();
-      return;
+      if (!props.onSubmitted) return;
     }
     setBusy('apply');
     setError(null);
     try {
-      const updated = await api.updateSnippetSettings(props.shareId, {
-        visibility,
-        ...(visibility === 'password' && password ? { password } : {}),
-        ...(lifetime === 'keep' ? {} : lifetimeToInput(lifetime)),
-      });
-      props.onApplied(updated);
-      props.onClose();
+      if (props.mode === 'saved') {
+        const updated = await api.updateSnippetSettings(props.shareId, {
+          visibility,
+          ...(visibility === 'password' && password ? { password } : {}),
+          ...(lifetime === 'keep' ? {} : lifetimeToInput(lifetime)),
+        });
+        props.onApplied(updated);
+      }
+      await props.onSubmitted?.();
     } catch (err) {
       setError(errorMessage(err, 'Saving the settings failed.'));
-      setBusy(null);
     }
+    // The form may have unmounted (popover closed or switched modes); React ignores the update then.
+    setBusy(null);
   };
 
+  const submitLabel = props.submitLabel ?? (props.mode === 'saved' ? 'Apply' : 'Done');
+
   return (
-    <Modal title="Bin settings" onClose={props.onClose} className="modal-settings">
+    <>
       {load.status === 'loading' && <p className="muted">Loading…</p>}
       {load.status === 'error' && (
         <p className="form-error" role="alert">
@@ -159,7 +182,7 @@ export function BinSettings(props: BinSettingsProps) {
               maxLength={LIMITS.passwordMax}
               placeholder={storedPassword ? 'New password (empty keeps the current one)' : 'Password'}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
+              autoFocus={props.autoFocusPassword ?? true}
             />
           )}
 
@@ -202,10 +225,19 @@ export function BinSettings(props: BinSettingsProps) {
             </p>
           )}
           <button type="submit" className="primary" disabled={!!busy}>
-            {busy === 'apply' ? 'Saving…' : props.mode === 'saved' ? 'Apply' : 'Done'}
+            {busy === 'apply' ? (props.busyLabel ?? 'Saving…') : submitLabel}
           </button>
         </form>
       )}
+    </>
+  );
+}
+
+export function BinSettings(props: BinSettingsProps) {
+  const { onClose, ...rest } = props;
+  return (
+    <Modal title="Bin settings" onClose={onClose} className="modal-settings">
+      <BinSettingsForm {...(rest as ModeProps)} onSubmitted={onClose} />
     </Modal>
   );
 }

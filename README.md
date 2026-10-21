@@ -6,16 +6,18 @@ BinCode is a minimalist playground for writing, previewing and sharing HTML/CSS/
 
 ## Features
 - **Monaco editor** with HTML / CSS / JS tabs (per-tab undo history), dark/light theme following your system
-- **Live preview** in a sandboxed iframe, with pause/resume and an optional in-preview console (Eruda)
+- **Live preview** in a sandboxed iframe, with pause/resume and ⌘/Ctrl+Enter to re-run
+- **Console drawer** — console output and uncaught errors from your snippet, with a count badge, Clear and All/Warn/Error filters
 - **Share links** — `/?share=<id>`; each bin is **Link** (anyone with the link), **Password**, or **Only me**
 - **Self-destructing bins** — delete after the first view, or after 10 minutes to a month
 - **Collections** — group bins (a bin can be in several); keep a collection to yourself or share its list by link + password. Only-me bins are never listed to visitors
-- **One settings button** — the visibility button next to the title (or the gear in My snippets) sets who can open a bin, when it's deleted and its collections; changes apply instantly
+- **Share** — one click copies the link; the same popover sets who can open the bin, when it's deleted and its collections (changes apply instantly)
 - **My snippets** — list, filter by collection, open, update in place (the share link stays the same) and delete your snippets
 - **Fork** — save your own copy of anyone's shared snippet
 - **Local drafts** — unsaved work is autosaved in your browser and offered back after a reload
 - **Resizable split view** that stacks vertically on mobile
-- Keyboard shortcuts: `Ctrl/Cmd+S` save, `Ctrl/Cmd+1/2/3` switch tabs
+- **Format** button and editor settings (font size, word wrap)
+- Keyboard shortcuts: `Ctrl/Cmd+S` save, `Ctrl/Cmd+Enter` re-run, `Ctrl/Cmd+1/2/3` switch tabs
 
 ## No sign-ups, by design
 Accounts are created by an admin from the command line. Anyone can view shared snippets; only users can save.

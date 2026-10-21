@@ -62,12 +62,6 @@ export const DEFAULT_QUOTAS: Quotas = {
   storagePerUser: 50_000_000,
 };
 
-/** The preview frame has an opaque origin, so vendored scripts it loads count as cross-origin. */
-export const vendorCorp: RequestHandler = (_req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-};
-
 export interface RateLimits {
   /** requests per minute across /api */
   api?: number;

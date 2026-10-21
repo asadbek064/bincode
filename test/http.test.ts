@@ -61,10 +61,8 @@ test('preview page gets the permissive CSP', async () => {
   assert.match(csp, /frame-ancestors 'self'/);
 });
 
-test('vendor files are loadable cross-origin', async () => {
+test('app pages are same-origin resources only', async () => {
   const t = makeApp();
-  const res = await request(t.app).get('/vendor/eruda.min.js').expect(200);
-  assert.equal(res.headers['cross-origin-resource-policy'], 'cross-origin');
   const index = await request(t.app).get('/');
   assert.equal(index.headers['cross-origin-resource-policy'], 'same-origin');
 });

@@ -31,21 +31,24 @@ src/server/
                      signUnlockToken / hasUnlockToken (bin and collection unlock tokens)
     validate.ts      validateBody(schema) — replaces req.body with the parsed value
     error.ts         HttpError, notFound, errorHandler
-    security.ts      securityHeaders() (app vs preview CSP), noStore, vendorCorp, createRateLimiters(limits),
+    security.ts      securityHeaders() (app vs preview CSP), noStore, createRateLimiters(limits),
                      Quotas / DEFAULT_QUOTAS
   routes/            auth.ts, snippets.ts, collections.ts
 src/client/
   index.html         Vite entry (no inline scripts — strict CSP)
-  public/            Copied as-is: preview.html, vendor/eruda.min.js, logo/, favicon.ico
+  public/            Copied as-is: preview.html, logo/ (emerald </> mark + favicons)
   src/
     main.tsx, App.tsx, styles.css
-    components/      Toolbar, Icons, EditorPane (lazy), PreviewPane, SplitPane, Modal,
-                     LoginModal, ShareModal, BinSettings (the one settings panel), BinGate (password /
-                     burn gate), SnippetsDashboard (collections sidebar), CollectionForm,
+    components/      Toolbar (3-zone navbar) + Toolbar.css, SharePopover, AccountMenu, Popover,
+                     Icons, EditorPane (lazy; tabs, Format, editor settings) + EditorPane.css,
+                     PreviewPane, ConsoleDrawer + .css, SplitPane, Modal, LoginModal,
+                     BinSettings (BinSettingsForm + modal wrapper), BinGate (password / burn gate),
+                     SnippetsDashboard (collections sidebar), CollectionForm,
                      CollectionView (collection password gate), DraftBanner, Toast
     hooks/           useAuth, useSnippetEditor, useLocalDraft, useKeyboardShortcuts,
-                     useColorScheme, useDebouncedValue
-    lib/             api (typed fetch client, ApiError), previewDoc, monaco (workers),
+                     useColorScheme, useDebouncedValue, useConsoleLog
+    lib/             api (typed fetch client, ApiError), previewDoc (+ CONSOLE_BRIDGE), consoleTypes,
+                     monaco (workers, bincode-light / bincode-dark themes),
                      drafts, storage (safe localStorage), unlockTokens (sessionStorage),
                      binSettings (labels, pending settings), url, clipboard, template, time
 scripts/add-user.ts  CLI user creation
@@ -118,18 +121,23 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 ### Preview isolation (security-critical)
 - The preview is `<iframe src="/preview.html" sandbox="allow-scripts allow-modals allow-forms allow-popups">` — **never add `allow-same-origin`**; the opaque origin is what stops snippet code from reading the app's `localStorage` token.
 - `preview.html` posts `{type:'bincode:ready'}` to the parent; the parent replies `{type:'bincode:render', doc}` and the frame `document.write`s it. The iframe is remounted for every render.
-- The document is built by the pure function `src/client/src/lib/previewDoc.ts` (escapes `</script` / `</style`, optionally injects Eruda).
+- The document is built by the pure function `src/client/src/lib/previewDoc.ts` (escapes `</script` / `</style`). Its head carries one line of `CONSOLE_BRIDGE` + `STORAGE_SHIM` in its own `<script>` (so a syntax error in the user's JS can still be reported, inline HTML scripts are covered, and the user's script has no prefix — its line numbers are the user's own). The bridge wraps `console.*` and `error` / `unhandledrejection`, formats arguments safely (cycles, depth 3, 2,000 chars each, max 1,000 messages per run) and posts `{ type: 'bincode:console', level, text }` to the parent.
+- `PreviewPane` accepts console messages only from its current iframe's window, keeps only known levels and string text (≤ 10,000 chars), and `useConsoleLog` keeps ≤ 500 entries. Console text is untrusted: render it as text only. The doc no longer depends on the console toggle, so opening the drawer never re-runs the snippet; `runId` (⌘/Ctrl+Enter) forces a re-run.
 - `/preview.html` also sends a CSP `sandbox allow-scripts allow-modals allow-forms allow-popups` directive, so it has an opaque origin even when opened outside the iframe (e.g. a hostile site `window.open`s it). Its script only renders messages from `window.parent`.
-- `srcdoc` is intentionally not used: it would inherit the app's strict CSP and block snippet scripts. `/preview.html` gets its own permissive CSP; `/vendor/*` sends `Cross-Origin-Resource-Policy: cross-origin` so the opaque-origin frame can load Eruda.
+- `srcdoc` is intentionally not used: it would inherit the app's strict CSP and block snippet scripts. `/preview.html` gets its own permissive CSP. (Eruda and `/vendor` were removed in favour of the native console drawer.)
 
 ### Client
 - No router: `?share=<id>` and `?collection=<id>` + `history.pushState` / `popstate` (`lib/url.ts`). Unlock tokens live in sessionStorage `bincode:unlock:<kind>:<id>` (tab-scoped on purpose) and are sent on reload.
-- **One place for settings**: the toolbar's labelled visibility button (Link / Password / Only me) and each row's gear in My snippets open `BinSettings`: visibility segments, a password field when needed, one "Delete" select (Never / After first view / After 10 min … 1 month — burn and expiry are one choice in the UI), and collection checkboxes (only if the user has collections). For a saved bin "Apply" sends PATCH at once and leaves editor content/dirty alone; for a new bin the choices are kept in App state (`pending`, never in drafts — no passwords in localStorage) and sent with the first POST, then collections are added.
+- **Navbar** (`Toolbar`, 56px): left = logo/wordmark (new bin), ghost title input, save status (Saved / Unsaved / Saving…); centre = Editor / Preview / Console toggles (console count badge, red on errors); right = Run/Pause, **Share**, **Save** (⌘S), account avatar menu (My snippets, New bin, Fork, Sign out) or Log in. Styles live in `Toolbar.css`, scoped `.toolbar.navbar` because component CSS is bundled before `styles.css`.
+- **Share** (`SharePopover`): on a saved bin it copies the link at once (toast) and opens a popover with the link and, for the owner, `BinSettingsForm`; on a new bin the popover shows the form with "Save & copy link", which calls `App.saveAndCopy(settings)` (settings passed explicitly — `pendingRef` would be stale until the next render). The first save via Save copies the link and toasts too; there is no share dialog any more.
+- **Settings form** (`BinSettingsForm`, used by Share and by the My snippets row gear via the `BinSettings` modal): visibility segments, a password field when needed, one "Delete" select (Never / After first view / After 10 min … 1 month — burn and expiry are one choice in the UI), and collection checkboxes (only if the user has collections). For a saved bin "Apply" sends PATCH at once and leaves editor content/dirty alone; for a new bin the choices are kept in App state (`pending`, never in drafts — no passwords in localStorage) and sent with the first POST, then collections are added.
 - The workspace has a `view` (`App.tsx`): `'editor'`, `'blank'` (a `?share=`/`?collection=` link still loading), `{ locked }` or `{ unavailable }`. Anything but `'editor'` replaces the editor and preview, so a link never shows the demo snippet as if it were the bin: a locked bin shows only `BinGate` (an inline card: password and/or burn warning), a 404 shows "doesn't exist, has expired, or is private" with Log in / New bin. Save, Fork and the view toggles are hidden there, and `save()` refuses to run. A burned bin's content is loaded as a **new unsaved bin** so Save makes a copy.
 - State: `AuthProvider` (token in `localStorage['bincode:token']`, validated via `/api/auth/me`) and the `useSnippetEditor` reducer. No state library.
 - Save: not logged in → login then retry; owner → PUT (same link); someone else's → fork; new → POST.
 - Drafts: `localStorage['bincode:draft:<shareId|new>']`, debounced, restored/offered via `DraftBanner`, cleared on save. Drafts hold content only.
-- Monaco is code-split (lazy `EditorPane`) and its workers are bundled with Vite `?worker` imports (`lib/monaco.ts`).
+- Monaco is code-split (lazy `EditorPane`) and its workers are bundled with Vite `?worker` imports (`lib/monaco.ts`). Editor prefs (font size 12/14/16, word wrap) persist in `localStorage['bincode:editor']`. Format runs `editor.action.formatDocument`.
+- Theme: light-first slate/emerald tokens in `styles.css` `:root`, mirrored for `prefers-color-scheme: dark`; use the variables, never hard-coded colours (Tailwind is deliberately not used).
+- Shortcuts: ⌘/Ctrl+S save, ⌘/Ctrl+Enter re-run, ⌘/Ctrl+1/2/3 tabs (registered both in Monaco and globally).
 
 ## Conventions
 - 2-space indent, single quotes, semicolons; comments explain *why*.

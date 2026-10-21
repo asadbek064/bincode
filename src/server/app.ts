@@ -10,7 +10,6 @@ import {
   createRateLimiters,
   noStore,
   securityHeaders,
-  vendorCorp,
   type Quotas,
   type RateLimits,
 } from './middleware/security.ts';
@@ -24,7 +23,7 @@ import { snippetsRouter } from './routes/snippets.ts';
 export interface AppOptions {
   db: Db;
   config: Config;
-  /** directory containing the built client (index.html, preview.html, assets/, vendor/) */
+  /** directory containing the built client (index.html, preview.html, assets/) */
   clientDir: string;
   limits?: RateLimits;
   quotas?: Partial<Quotas>;
@@ -94,7 +93,6 @@ export function createApp({ db, config, clientDir: rawClientDir, limits, quotas 
   api.use(notFound);
   app.use('/api', api);
 
-  app.use('/vendor', vendorCorp);
   app.use(
     express.static(clientDir, {
       index: false,

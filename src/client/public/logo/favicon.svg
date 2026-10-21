@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svgjs="http://svgjs.dev/svgjs" width="100" height="100"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_126_85)">
-<path d="M87.5 0H12.5C5.59644 0 0 5.59644 0 12.5V87.5C0 94.4036 5.59644 100 12.5 100H87.5C94.4036 100 100 94.4036 100 87.5V12.5C100 5.59644 94.4036 0 87.5 0Z" fill="#DEC915"></path>
-<path d="M18.75 23.75C21.5114 23.75 23.75 21.5114 23.75 18.75C23.75 15.9886 21.5114 13.75 18.75 13.75C15.9886 13.75 13.75 15.9886 13.75 18.75C13.75 21.5114 15.9886 23.75 18.75 23.75Z" fill="white"></path>
-<path d="M37.5 23.75C40.2614 23.75 42.5 21.5114 42.5 18.75C42.5 15.9886 40.2614 13.75 37.5 13.75C34.7386 13.75 32.5 15.9886 32.5 18.75C32.5 21.5114 34.7386 23.75 37.5 23.75Z" fill="white"></path>
-<path d="M56.25 23.75C59.0114 23.75 61.25 21.5114 61.25 18.75C61.25 15.9886 59.0114 13.75 56.25 13.75C53.4886 13.75 51.25 15.9886 51.25 18.75C51.25 21.5114 53.4886 23.75 56.25 23.75Z" fill="white"></path>
-<path d="M25 50L36.0858 61.0858C36.8668 61.8668 36.8668 63.1332 36.0858 63.9142L25 75" stroke="white" stroke-width="6.25"></path>
-<path d="M50 75H71C72.1046 75 73 74.1046 73 73V71C73 69.8954 72.1046 69 71 69H50C48.8954 69 48 69.8954 48 71V73C48 74.1046 48.8954 75 50 75Z" fill="white" stroke="white" stroke-width="1.25"></path>
-</g>
-<defs>
-<clipPath id="SvgjsClipPath1009">
-<rect width="100" height="100" fill="white"></rect>
-</clipPath>
-</defs>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
-@media (prefers-color-scheme: dark) { :root { filter: none; } }
-</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="22" fill="#059669"/>
+  <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 32 16 50l18 18"/>
+    <path d="M66 32l18 18-18 18"/>
+    <path d="M56 26 44 74"/>
+  </g>
+</svg>

@@ -1,0 +1,169 @@
+/* Editor pane: language tabs on the left, editor actions on the right. Extends the
+   base .tab-bar / .tab rules in styles.css. */
+
+/* The header owns the bar look; the tablist inside it keeps its own horizontal
+   scroll, while the actions sit outside it so the settings popover isn't clipped. */
+.editor-header {
+  display: flex;
+  align-items: stretch;
+  height: 38px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-header .tab-bar {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  align-items: stretch;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+.editor-header .tab {
+  position: relative;
+  margin: 0;
+  min-height: 0;
+  padding: 0 0.9rem;
+  gap: 0.45rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: background-color var(--ease), color var(--ease);
+}
+
+.editor-header .tab:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.editor-header .tab.active,
+.editor-header .tab.active:hover {
+  background: var(--bg);
+  color: var(--text);
+  border: none;
+}
+
+/* 2px indicator drawn over the header's bottom border. */
+.editor-header .tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: transparent;
+  transition: background-color var(--ease);
+}
+
+.editor-header .tab.active::after {
+  background: var(--primary);
+}
+
+.tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tab-dot-html {
+  background: #ea580c;
+}
+
+.tab-dot-css {
+  background: #2563eb;
+}
+
+.tab-dot-js {
+  background: #eab308;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0.4rem;
+  flex-shrink: 0;
+}
+
+.editor-actions .icon-button {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+}
+
+.editor-actions .icon-button.open {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Editor settings popover */
+.editor-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 200px;
+}
+
+.editor-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.editor-setting .segmented {
+  flex: 0 0 auto;
+}
+
+.editor-setting .segment {
+  min-width: 40px;
+  min-height: 28px;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.switch {
+  position: relative;
+  width: 34px;
+  min-height: 0;
+  height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  border-color: var(--border);
+  background: var(--surface-hover);
+}
+
+.switch:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.switch.on,
+.switch.on:hover:not(:disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--ease);
+}
+
+.switch.on .switch-thumb {
+  transform: translateX(14px);
+}
