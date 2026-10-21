@@ -175,6 +175,7 @@ button.danger-text:hover:not(:disabled) {
 input[type='text'],
 input[type='email'],
 input[type='password'],
+select,
 textarea {
   font: inherit;
   font-size: 0.9rem;
@@ -193,7 +194,9 @@ textarea {
 input:focus,
 input:focus-visible,
 textarea:focus,
-textarea:focus-visible {
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
   outline: none;
   border-color: var(--focus);
   box-shadow: 0 0 0 3px var(--primary-soft);
@@ -302,10 +305,6 @@ textarea:focus-visible {
 .toggle.toggle-paused {
   color: var(--on-primary);
   background: var(--primary);
-}
-
-.toggle.toggle-private {
-  border-color: var(--primary);
 }
 
 .toggle.toggle-paused:hover:not(:disabled) {
@@ -573,6 +572,10 @@ textarea:focus-visible {
   max-width: 860px;
 }
 
+.modal-settings {
+  max-width: 400px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -746,6 +749,59 @@ textarea:focus-visible {
   color: var(--text);
 }
 
+/* Bin settings */
+.settings-button {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.settings-button.visibility-private,
+.settings-button.visibility-password {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segment {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.segment + .segment {
+  border-left: 1px solid var(--border);
+}
+
+.segment.selected,
+.segment.selected:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--primary-strong);
+}
+
+.row-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.row-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.gate-warning {
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius);
+}
+
 /* Dashboard and collections */
 .dashboard {
   display: grid;
@@ -822,14 +878,9 @@ textarea:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
-  margin: 0.25rem 0 0.35rem 0.6rem;
   padding: 0.5rem 0.7rem;
   border-radius: var(--radius);
   background: var(--surface);
-}
-
-.collection-notice {
-  border-radius: var(--radius);
 }
 
 /* Toast */
@@ -895,8 +946,13 @@ textarea:focus-visible {
 /* Responsive */
 @media (max-width: 1100px) {
   .toggle-label,
-  .brand-name {
+  .brand-name,
+  .actions button:not(.primary) .action-label {
     display: none;
+  }
+
+  .title-input {
+    min-width: 7rem;
   }
 }
 

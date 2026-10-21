@@ -1,16 +1,10 @@
 const SHARE = 'share';
-/** collection a snippet was opened from, so its unlock token is sent along */
-const VIA = 'c';
 const COLLECTION = 'collection';
 
 const param = (name: string): string | null => new URLSearchParams(window.location.search).get(name) || null;
 
 export function readShareId(): string | null {
   return param(SHARE);
-}
-
-export function readViaCollection(): string | null {
-  return param(SHARE) ? param(VIA) : null;
 }
 
 /** shareId of a collection link (`/?collection=…`), when no snippet is open. */
@@ -26,10 +20,8 @@ export function collectionUrl(shareId: string): string {
   return `${window.location.origin}/?${COLLECTION}=${encodeURIComponent(shareId)}`;
 }
 
-function pathFor(shareId: string | null, via?: string | null): string {
-  if (!shareId) return '/';
-  const viaPart = via ? `&${VIA}=${encodeURIComponent(via)}` : '';
-  return `/?${SHARE}=${encodeURIComponent(shareId)}${viaPart}`;
+function pathFor(shareId: string | null): string {
+  return shareId ? `/?${SHARE}=${encodeURIComponent(shareId)}` : '/';
 }
 
 function push(next: string): void {
@@ -37,12 +29,12 @@ function push(next: string): void {
   window.history.pushState(null, '', next);
 }
 
-export function pushShareId(shareId: string | null, via?: string | null): void {
-  push(pathFor(shareId, via));
+export function pushShareId(shareId: string | null): void {
+  push(pathFor(shareId));
 }
 
-export function replaceShareId(shareId: string | null, via?: string | null): void {
-  window.history.replaceState(null, '', pathFor(shareId, via));
+export function replaceShareId(shareId: string | null): void {
+  window.history.replaceState(null, '', pathFor(shareId));
 }
 
 export function pushCollectionId(shareId: string): void {

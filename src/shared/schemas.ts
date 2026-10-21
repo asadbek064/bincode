@@ -1,6 +1,6 @@
 // Server-side validation schemas. The client only imports types/constants, so zod stays out of the bundle.
 import { z } from 'zod';
-import { DEFAULT_TITLE, LIMITS, VISIBILITIES } from './constants.ts';
+import { DEFAULT_TITLE, EXPIRATION_KEYS, LIMITS, VISIBILITIES } from './constants.ts';
 
 export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(LIMITS.emailMax));
 
@@ -21,6 +21,15 @@ const codeSchema = z.string().max(LIMITS.codeMax);
 
 export const visibilitySchema = z.enum(VISIBILITIES);
 
+const binPasswordSchema = z.string().min(LIMITS.collectionPasswordMin).max(LIMITS.passwordMax);
+
+export const snippetSettingsSchema = z.object({
+  visibility: visibilitySchema.optional(),
+  password: binPasswordSchema.optional(),
+  expiresIn: z.enum(EXPIRATION_KEYS as [string, ...string[]]).optional(),
+  burnAfterRead: z.boolean().optional(),
+});
+
 function checkCodeSize(v: { html?: string; css?: string; js?: string }, ctx: z.RefinementCtx) {
   const size = (v.html?.length ?? 0) + (v.css?.length ?? 0) + (v.js?.length ?? 0);
   if (size > LIMITS.codeMax) {
@@ -34,7 +43,16 @@ export const snippetInputSchema = z
     html: codeSchema.default(''),
     css: codeSchema.default(''),
     js: codeSchema.default(''),
-    visibility: visibilitySchema.optional(),
+  })
+  .superRefine(checkCodeSize);
+
+export const createSnippetSchema = z
+  .object({
+    title: titleSchema.default(DEFAULT_TITLE),
+    html: codeSchema.default(''),
+    css: codeSchema.default(''),
+    js: codeSchema.default(''),
+    settings: snippetSettingsSchema.optional(),
   })
   .superRefine(checkCodeSize);
 
@@ -44,7 +62,6 @@ export const forkInputSchema = z
     html: codeSchema.optional(),
     css: codeSchema.optional(),
     js: codeSchema.optional(),
-    visibility: visibilitySchema.optional(),
   })
   .superRefine(checkCodeSize);
 
@@ -56,4 +73,9 @@ export const collectionInputSchema = z.object({
 
 export const unlockSchema = z.object({
   password: z.string().min(1).max(LIMITS.passwordMax),
+});
+
+/** Burn-only bins are opened without a password. */
+export const unlockSnippetSchema = z.object({
+  password: z.string().min(1).max(LIMITS.passwordMax).optional(),
 });

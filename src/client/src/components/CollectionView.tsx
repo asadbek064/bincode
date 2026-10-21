@@ -4,15 +4,13 @@ import type { CollectionResponse } from '../../../shared/api.ts';
 import { LIMITS } from '../../../shared/constants.ts';
 import * as api from '../lib/api.ts';
 import { ApiError } from '../lib/api.ts';
-import { forgetCollectionToken, getCollectionToken, saveCollectionToken } from '../lib/collectionTokens.ts';
+import { forgetUnlockToken, getUnlockToken, saveUnlockToken } from '../lib/unlockTokens.ts';
 import { relativeTime } from '../lib/time.ts';
 import { Modal } from './Modal.tsx';
 
 interface CollectionViewProps {
   shareId: string;
-  /** shown above the gate, e.g. when a private bin needs the collection unlocked again */
-  notice?: string;
-  onOpen: (snippetShareId: string, collectionShareId: string) => void;
+  onOpen: (snippetShareId: string) => void;
   onClose: () => void;
 }
 
@@ -21,18 +19,18 @@ type ViewState =
   | { status: 'error'; message: string }
   | { status: 'ready'; data: CollectionResponse };
 
-export function CollectionView({ shareId, notice, onOpen, onClose }: CollectionViewProps) {
+export function CollectionView({ shareId, onOpen, onClose }: CollectionViewProps) {
   const [state, setState] = useState<ViewState>({ status: 'loading' });
   const [password, setPassword] = useState('');
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const token = getCollectionToken(shareId);
+    const token = getUnlockToken('collection', shareId);
     try {
       const data = await api.getCollection(shareId, token);
       // A stale token (password changed) or a stale login just means "locked" or anonymous again.
-      if (data.locked && token) forgetCollectionToken(shareId);
+      if (data.locked && token) forgetUnlockToken('collection', shareId);
       setState({ status: 'ready', data });
       return data;
     } catch (err) {
@@ -67,7 +65,7 @@ export function CollectionView({ shareId, notice, onOpen, onClose }: CollectionV
     setUnlockError(null);
     try {
       const res = await api.unlockCollection(shareId, password);
-      saveCollectionToken(shareId, res);
+      saveUnlockToken('collection', shareId, res);
       setPassword('');
       await load();
     } catch (err) {
@@ -88,7 +86,6 @@ export function CollectionView({ shareId, notice, onOpen, onClose }: CollectionV
 
   return (
     <Modal title={title} onClose={onClose} className="modal-wide">
-      {notice && <p className="banner banner-warning collection-notice">{notice}</p>}
       {state.status === 'loading' && <p className="muted">Loading…</p>}
       {state.status === 'error' && (
         <p className="form-error" role="alert">
@@ -123,7 +120,6 @@ export function CollectionView({ shareId, notice, onOpen, onClose }: CollectionV
 
       {state.status === 'ready' && !state.data.locked && (
         <>
-          {state.data.collection.description && <p className="muted">{state.data.collection.description}</p>}
           {state.data.snippets.length === 0 ? (
             <p className="muted">This collection is empty.</p>
           ) : (
@@ -131,10 +127,10 @@ export function CollectionView({ shareId, notice, onOpen, onClose }: CollectionV
               {state.data.snippets.map((s) => (
                 <li key={s.shareId} className="snippet-item">
                   <div className="snippet-row">
-                    <button type="button" className="snippet-open" onClick={() => onOpen(s.shareId, shareId)}>
+                    <button type="button" className="snippet-open" onClick={() => onOpen(s.shareId)}>
                       <span className="snippet-title">
                         {s.title}
-                        {s.visibility === 'private' && <span className="badge">private</span>}
+                        {s.visibility === 'password' && <span className="badge">password</span>}
                       </span>
                       <span className="snippet-meta" title={new Date(s.updatedAt).toLocaleString()}>
                         Updated {relativeTime(s.updatedAt)}

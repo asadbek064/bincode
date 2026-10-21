@@ -50,10 +50,10 @@ export interface RateLimits {
   login?: number;
   /** failed login attempts per 15 minutes, per email (across all IPs) */
   loginEmail?: number;
-  /** failed collection unlocks per 15 minutes, per IP */
+  /** failed bin/collection unlocks per 15 minutes, per IP */
   unlock?: number;
-  /** failed unlocks per hour, per collection (across all IPs) */
-  unlockCollection?: number;
+  /** failed unlocks per hour, per bin or collection (across all IPs) */
+  unlockTarget?: number;
   /** mutations (POST/PUT/DELETE) per minute, per user */
   writes?: number;
 }
@@ -103,12 +103,12 @@ export function createRateLimiters(limits: RateLimits = {}) {
       },
     }),
     unlock: limiter({ windowMs: 15 * 60_000, limit: limits.unlock ?? 10, skipSuccessfulRequests: true }),
-    // Same idea per collection. Visitors can be locked out for an hour; the owner never needs to unlock.
-    unlockCollection: limiter({
+    // Same idea per bin or collection. Visitors can be locked out for an hour; owners never need to unlock.
+    unlockTarget: limiter({
       windowMs: 60 * 60_000,
-      limit: limits.unlockCollection ?? 50,
+      limit: limits.unlockTarget ?? 50,
       skipSuccessfulRequests: true,
-      keyGenerator: (req) => `collection:${String(req.params.shareId)}`,
+      keyGenerator: (req) => `${req.baseUrl}:${String(req.params.shareId)}`,
     }),
     // Must run after requireAuth; keyed per account so one user can't flood the database.
     writes: limiter({

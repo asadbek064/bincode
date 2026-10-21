@@ -8,10 +8,10 @@ import type {
   UnlockRequest,
   UnlockResponse,
 } from '../../shared/api.ts';
-import { COLLECTION_TOKEN_HEADER, SHARE_ID_PATTERN } from '../../shared/constants.ts';
+import { SHARE_ID_PATTERN, UNLOCK_TOKEN_HEADER } from '../../shared/constants.ts';
 import { collectionInputSchema, unlockSchema } from '../../shared/schemas.ts';
 import type { Config } from '../config.ts';
-import { signCollectionToken, verifyCollectionToken } from '../middleware/auth.ts';
+import { hasUnlockToken, signUnlockToken } from '../middleware/auth.ts';
 import { HttpError } from '../middleware/error.ts';
 import { validateBody } from '../middleware/validate.ts';
 import { toCollectionSummary, type CollectionData, type CollectionRecord, type CollectionsRepo } from '../repos/collections.ts';
@@ -63,9 +63,7 @@ export function collectionsRouter(deps: CollectionsRouterDeps): Router {
   }
 
   function isUnlocked(record: CollectionRecord, req: Request): boolean {
-    if (record.passwordHash === null) return false;
-    const grant = verifyCollectionToken(config, req.get(COLLECTION_TOKEN_HEADER));
-    return grant !== null && grant.collectionId === record.id && grant.passwordVersion === record.passwordVersion;
+    return record.passwordHash !== null && hasUnlockToken(config, 'collection', record, req.get(UNLOCK_TOKEN_HEADER));
   }
 
   async function toData(input: CollectionInput): Promise<CollectionData> {
@@ -100,11 +98,13 @@ export function collectionsRouter(deps: CollectionsRouterDeps): Router {
       res.json(body);
       return;
     }
+    // The password unlocks the list, not the bins: visitors never see private ones, not even their count.
+    const list = collections.listSnippets(record.id, req.user?.id, { includePrivate: isOwner });
     const body: CollectionResponse = {
       locked: false,
       isOwner,
-      collection: toCollectionSummary(record),
-      snippets: collections.listSnippets(record.id, req.user?.id),
+      collection: { ...toCollectionSummary(record), snippetCount: list.length },
+      snippets: list,
     };
     res.json(body);
   });
@@ -143,7 +143,7 @@ export function collectionsRouter(deps: CollectionsRouterDeps): Router {
     const { password } = req.body as UnlockRequest;
     // 403, not 401: a 401 means "your login is bad" to the client and would sign a logged-in visitor out.
     if (!(await bcrypt.compare(password, record.passwordHash))) throw new HttpError(403, 'Invalid password');
-    const body: UnlockResponse = signCollectionToken(config, record);
+    const body: UnlockResponse = signUnlockToken(config, 'collection', record);
     res.json(body);
   });
 

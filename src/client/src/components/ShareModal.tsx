@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Visibility } from '../../../shared/api.ts';
 import { copyText } from '../lib/clipboard.ts';
 import { Modal } from './Modal.tsx';
 
 interface ShareModalProps {
   url: string;
-  isPrivate: boolean;
+  visibility: Visibility;
+  burnAfterRead: boolean;
   onClose: () => void;
 }
 
-export function ShareModal({ url, isPrivate, onClose }: ShareModalProps) {
+const WHO: Record<Visibility, string> = {
+  unlisted: 'Anyone with this link can view and fork your snippet.',
+  password: 'Anyone with this link and the password can view and fork your snippet.',
+  private: 'This snippet is private: the link only works for you.',
+};
+
+export function ShareModal({ url, visibility, burnAfterRead, onClose }: ShareModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -32,9 +40,8 @@ export function ShareModal({ url, isPrivate, onClose }: ShareModalProps) {
   return (
     <Modal title="Share snippet" onClose={onClose}>
       <p className="muted">
-        {isPrivate
-          ? 'This snippet is private: the link only works for you, or for visitors who unlocked a password-protected collection that contains it.'
-          : 'Anyone with this link can view and fork your snippet.'}
+        {WHO[visibility]}
+        {burnAfterRead && visibility !== 'private' && ' It is deleted after the first view by someone else.'}
       </p>
       <div className="share-row">
         <input

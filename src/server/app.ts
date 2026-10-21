@@ -45,7 +45,14 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
   api.use('/auth', authRouter({ config, users, requireAuth, loginLimiters: [limiters.login, limiters.loginEmail] }));
   api.use(
     '/snippets',
-    snippetsRouter({ config, snippets, collections, requireAuth, optionalAuth, writeLimiter: limiters.writes }),
+    snippetsRouter({
+      config,
+      snippets,
+      requireAuth,
+      optionalAuth,
+      writeLimiter: limiters.writes,
+      unlockLimiters: [limiters.unlock, limiters.unlockTarget],
+    }),
   );
   api.use(
     '/collections',
@@ -56,7 +63,7 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
       requireAuth,
       optionalAuth,
       writeLimiter: limiters.writes,
-      unlockLimiters: [limiters.unlock, limiters.unlockCollection],
+      unlockLimiters: [limiters.unlock, limiters.unlockTarget],
     }),
   );
   api.use(notFound);

@@ -24,7 +24,7 @@ test('create returns the full snippet without internal ids', async () => {
   assert.equal(s.forkedFrom, null);
   assert.equal(s.createdAt, s.updatedAt);
   assert.ok(!Number.isNaN(Date.parse(s.createdAt)));
-  assert.deepEqual(Object.keys(s).sort(), ['collections', 'createdAt', 'css', 'forkedFrom', 'html', 'isOwner', 'js', 'shareId', 'title', 'updatedAt', 'visibility']);
+  assert.deepEqual(Object.keys(s).sort(), ['burnAfterRead', 'collections', 'createdAt', 'css', 'expiresAt', 'forkedFrom', 'html', 'isOwner', 'js', 'shareId', 'title', 'updatedAt', 'visibility']);
 });
 
 test('empty or missing title becomes Untitled and code defaults to empty', async () => {
@@ -99,7 +99,7 @@ test('list shows only own snippets, newest updatedAt first, without code', async
   assert.deepEqual(res.body.snippets.map((s: { title: string }) => s.title), ['first!', 'second']);
   assert.equal(res.body.snippets[1].shareId, second.shareId);
   for (const s of res.body.snippets) {
-    assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'forkedFrom', 'shareId', 'title', 'updatedAt', 'visibility']);
+    assert.deepEqual(Object.keys(s).sort(), ['burnAfterRead', 'createdAt', 'expiresAt', 'forkedFrom', 'shareId', 'title', 'updatedAt', 'visibility']);
   }
 
   const empty = await request(t.app).get('/api/snippets').set(...auth(t.tokenFor(BOB))).expect(200);

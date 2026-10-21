@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import request from 'supertest';
-import { COLLECTION_TOKEN_HEADER } from '../src/shared/constants.ts';
+import { UNLOCK_TOKEN_HEADER } from '../src/shared/constants.ts';
 import { addToCollection, auth, createCollection, createSnippet, makeApp, type TestApp } from './helpers.ts';
 
 const PW = 'collection-pw';
-const PRIVATE = { title: 'Secret', html: '<p>secret</p>', css: '', js: '', visibility: 'private' };
+const PRIVATE = { title: 'Secret', html: '<p>secret</p>', css: '', js: '', settings: { visibility: 'private' } };
 
 async function unlock(t: TestApp, shareId: string, password = PW): Promise<string> {
   const res = await request(t.app).post(`/api/collections/${shareId}/unlock`).send({ password }).expect(200);
@@ -79,78 +79,73 @@ test('a locked collection reveals only its title', async () => {
   const s = await createSnippet(t, 'alice@example.com', { title: 'Inside', html: '<p>x</p>' });
   await addToCollection(t, 'alice@example.com', c.shareId, s.shareId);
 
-  for (const headers of [{}, { Authorization: `Bearer ${t.tokenFor('bob@example.com')}` }, { [COLLECTION_TOKEN_HEADER]: 'garbage' }]) {
+  for (const headers of [{}, { Authorization: `Bearer ${t.tokenFor('bob@example.com')}` }, { [UNLOCK_TOKEN_HEADER]: 'garbage' }]) {
     const res = await request(t.app).get(`/api/collections/${c.shareId}`).set(headers).expect(200);
     assert.deepEqual(res.body, { locked: true, shareId: c.shareId, title: 'Gated' });
   }
 });
 
-test('unlocking with the password lists the bins and grants their private members', async () => {
+test('unlocking shows the list but never private bins, and grants no bin access', async () => {
   const t = makeApp();
   const c = await createCollection(t, 'alice@example.com', { title: 'Gated', password: PW });
-  const member = await createSnippet(t, 'alice@example.com', PRIVATE);
-  const outsider = await createSnippet(t, 'alice@example.com', PRIVATE);
-  await addToCollection(t, 'alice@example.com', c.shareId, member.shareId);
+  const open = await createSnippet(t, 'alice@example.com', { title: 'Open', html: '<p>open</p>' });
+  const secret = await createSnippet(t, 'alice@example.com', PRIVATE);
+  const gated = await createSnippet(t, 'alice@example.com', {
+    title: 'Gated bin',
+    settings: { visibility: 'password', password: 'bin-password' },
+  });
+  for (const s of [open, secret, gated]) await addToCollection(t, 'alice@example.com', c.shareId, s.shareId);
 
   await request(t.app).post(`/api/collections/${c.shareId}/unlock`).send({ password: 'wrong-password' }).expect(403);
   const token = await unlock(t, c.shareId);
 
-  const res = await request(t.app).get(`/api/collections/${c.shareId}`).set(COLLECTION_TOKEN_HEADER, token).expect(200);
+  const res = await request(t.app).get(`/api/collections/${c.shareId}`).set(UNLOCK_TOKEN_HEADER, token).expect(200);
   assert.equal(res.body.locked, false);
   assert.equal(res.body.isOwner, false);
-  assert.equal(res.body.collection.description, '');
-  assert.deepEqual(res.body.snippets.map((s: { shareId: string }) => s.shareId), [member.shareId]);
+  assert.deepEqual(res.body.snippets.map((s: { title: string }) => s.title).sort(), ['Gated bin', 'Open']);
+  // Not even the count gives the private bin away.
+  assert.equal(res.body.collection.snippetCount, 2);
   assert.equal('html' in res.body.snippets[0], false);
 
-  const bin = await request(t.app).get(`/api/snippets/${member.shareId}`).set(COLLECTION_TOKEN_HEADER, token).expect(200);
-  assert.equal(bin.body.html, '<p>secret</p>');
-  assert.equal(bin.body.isOwner, false);
-  await request(t.app).get(`/api/snippets/${outsider.shareId}`).set(COLLECTION_TOKEN_HEADER, token).expect(404);
-  await request(t.app).get(`/api/snippets/${member.shareId}`).expect(404);
-  // Viewing is granted, copying is not.
-  await request(t.app)
-    .post(`/api/snippets/${member.shareId}/fork`)
-    .set(...auth(t.tokenFor('bob@example.com')))
-    .set(COLLECTION_TOKEN_HEADER, token)
-    .send({})
-    .expect(404);
+  // The collection token opens nothing: each bin keeps its own visibility.
+  await request(t.app).get(`/api/snippets/${secret.shareId}`).set(UNLOCK_TOKEN_HEADER, token).expect(404);
+  const stillLocked = await request(t.app).get(`/api/snippets/${gated.shareId}`).set(UNLOCK_TOKEN_HEADER, token).expect(200);
+  assert.equal(stillLocked.body.locked, true);
+
+  // The owner sees everything.
+  const own = await request(t.app).get(`/api/collections/${c.shareId}`).set(...auth(t.tokenFor('alice@example.com'))).expect(200);
+  assert.equal(own.body.snippets.length, 3);
+  assert.equal(own.body.collection.snippetCount, 3);
 });
 
 test('a token for one collection does not unlock another', async () => {
   const t = makeApp();
   const a = await createCollection(t, 'alice@example.com', { title: 'A', password: PW });
   const b = await createCollection(t, 'alice@example.com', { title: 'B', password: PW });
-  const inB = await createSnippet(t, 'alice@example.com', PRIVATE);
-  await addToCollection(t, 'alice@example.com', b.shareId, inB.shareId);
   const tokenA = await unlock(t, a.shareId);
-
-  const res = await request(t.app).get(`/api/collections/${b.shareId}`).set(COLLECTION_TOKEN_HEADER, tokenA).expect(200);
+  const res = await request(t.app).get(`/api/collections/${b.shareId}`).set(UNLOCK_TOKEN_HEADER, tokenA).expect(200);
   assert.equal(res.body.locked, true);
-  await request(t.app).get(`/api/snippets/${inB.shareId}`).set(COLLECTION_TOKEN_HEADER, tokenA).expect(404);
 });
 
 test('changing or removing the password revokes unlock tokens', async () => {
   const t = makeApp();
   const alice = auth(t.tokenFor('alice@example.com'));
   const c = await createCollection(t, 'alice@example.com', { title: 'Gated', password: PW });
-  const s = await createSnippet(t, 'alice@example.com', PRIVATE);
-  await addToCollection(t, 'alice@example.com', c.shareId, s.shareId);
   const token = await unlock(t, c.shareId);
 
   await request(t.app).put(`/api/collections/${c.shareId}`).set(...alice).send({ title: 'Gated', password: 'another-pw' }).expect(200);
-  const relocked = await request(t.app).get(`/api/collections/${c.shareId}`).set(COLLECTION_TOKEN_HEADER, token).expect(200);
+  const relocked = await request(t.app).get(`/api/collections/${c.shareId}`).set(UNLOCK_TOKEN_HEADER, token).expect(200);
   assert.equal(relocked.body.locked, true);
-  await request(t.app).get(`/api/snippets/${s.shareId}`).set(COLLECTION_TOKEN_HEADER, token).expect(404);
 
   // A rename alone keeps the new token valid.
   const fresh = await unlock(t, c.shareId, 'another-pw');
   await request(t.app).put(`/api/collections/${c.shareId}`).set(...alice).send({ title: 'New name' }).expect(200);
-  await request(t.app).get(`/api/snippets/${s.shareId}`).set(COLLECTION_TOKEN_HEADER, fresh).expect(200);
+  const still = await request(t.app).get(`/api/collections/${c.shareId}`).set(UNLOCK_TOKEN_HEADER, fresh).expect(200);
+  assert.equal(still.body.locked, false);
 
   // Removing the password makes it owner-only again.
   await request(t.app).put(`/api/collections/${c.shareId}`).set(...alice).send({ title: 'x', password: null }).expect(200);
-  await request(t.app).get(`/api/collections/${c.shareId}`).set(COLLECTION_TOKEN_HEADER, fresh).expect(404);
-  await request(t.app).get(`/api/snippets/${s.shareId}`).set(COLLECTION_TOKEN_HEADER, fresh).expect(404);
+  await request(t.app).get(`/api/collections/${c.shareId}`).set(UNLOCK_TOKEN_HEADER, fresh).expect(404);
 });
 
 test('collection tokens and login tokens are not interchangeable', async () => {
@@ -160,7 +155,7 @@ test('collection tokens and login tokens are not interchangeable', async () => {
   await request(t.app).get('/api/auth/me').set(...auth(token)).expect(401);
   const res = await request(t.app)
     .get(`/api/collections/${c.shareId}`)
-    .set(COLLECTION_TOKEN_HEADER, t.tokenFor('alice@example.com'))
+    .set(UNLOCK_TOKEN_HEADER, t.tokenFor('alice@example.com'))
     .expect(200);
   assert.equal(res.body.locked, true);
 });
@@ -230,7 +225,7 @@ test('membership changes bump the collection updatedAt', async () => {
 });
 
 test('failed unlocks are limited per IP and per collection', async () => {
-  const t = makeApp({ limits: { unlock: 2, unlockCollection: 3 }, env: { TRUST_PROXY: '1' } });
+  const t = makeApp({ limits: { unlock: 2, unlockTarget: 3 }, env: { TRUST_PROXY: '1' } });
   const c = await createCollection(t, 'alice@example.com', { title: 'Gated', password: PW });
   const attempt = (ip: string, password = 'wrong-password') =>
     request(t.app).post(`/api/collections/${c.shareId}/unlock`).set('X-Forwarded-For', ip).send({ password });

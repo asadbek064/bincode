@@ -1,7 +1,7 @@
 # CLAUDE.md — guide for AI assistants working on BinCode
 
 ## What this is
-BinCode is a self-hostable JSFiddle alternative. Users write HTML/CSS/JS snippets ("bins") with a live preview and share them by link. Bins are unlisted (link = access) or private (owner only), and can be grouped into collections that are owner-only or unlocked by link + password. Accounts are created **only** via the CLI (`pnpm add-user`) — no self sign-up, by design.
+BinCode is a self-hostable JSFiddle alternative. Users write HTML/CSS/JS snippets ("bins") with a live preview and share them by link. Each bin has one visibility — Link (`unlisted`), Password, or Only me (`private`) — and an optional lifetime (expire after a duration, or burn after the first view). Bins can be grouped into collections, which only organize; a collection can be shared by link + password. It is a quick tool: keep the UI minimal. Accounts are created **only** via the CLI (`pnpm add-user`) — no self sign-up, by design.
 
 ## Stack
 - **Language**: TypeScript everywhere (ESM, `"type": "module"`), single `package.json`, pnpm
@@ -17,10 +17,10 @@ BinCode is a self-hostable JSFiddle alternative. Users write HTML/CSS/JS snippet
 ```
 src/shared/          The API contract — imported by both server and client
   api.ts             DTO / request / response types (+ endpoint list)
-  constants.ts       LIMITS, share-id format, VISIBILITIES, COLLECTION_TOKEN_HEADER, preview paths & message types
+  constants.ts       LIMITS, share-id format, VISIBILITIES, EXPIRATIONS, UNLOCK_TOKEN_HEADER, preview paths & message types
   schemas.ts         zod schemas (server-only; client must not import it → keeps zod out of the bundle)
 src/server/
-  index.ts           Entry: loads .env, config, opens DB, listens; graceful SIGINT/SIGTERM shutdown
+  index.ts           Entry: loads .env, config, opens DB, hourly expired-bin sweep, listens; graceful shutdown
   app.ts             createApp({ db, config, clientDir, limits }) — used by tests too
   config.ts          loadConfig() (full) and loadDbConfig() (no JWT; used by add-user)
   db.ts              openDb(file | ':memory:') + base schema + PRAGMA user_version migrations
@@ -28,7 +28,7 @@ src/server/
                      collections.ts (membership, password_version)
   middleware/
     auth.ts          createAuth(config, users) → { requireAuth, optionalAuth }; signToken(config, userId);
-                     signCollectionToken / verifyCollectionToken (collection unlock tokens)
+                     signUnlockToken / hasUnlockToken (bin and collection unlock tokens)
     validate.ts      validateBody(schema) — replaces req.body with the parsed value
     error.ts         HttpError, notFound, errorHandler
     security.ts      securityHeaders() (app vs preview CSP), vendorCorp, createRateLimiters(limits)
@@ -39,13 +39,14 @@ src/client/
   src/
     main.tsx, App.tsx, styles.css
     components/      Toolbar, Icons, EditorPane (lazy), PreviewPane, SplitPane, Modal,
-                     LoginModal, ShareModal, SnippetsDashboard (collections sidebar), CollectionForm,
-                     CollectionView (password gate), DraftBanner, Toast
+                     LoginModal, ShareModal, BinSettings (the one settings panel), BinGate (password /
+                     burn gate), SnippetsDashboard (collections sidebar), CollectionForm,
+                     CollectionView (collection password gate), DraftBanner, Toast
     hooks/           useAuth, useSnippetEditor, useLocalDraft, useKeyboardShortcuts,
                      useColorScheme, useDebouncedValue
     lib/             api (typed fetch client, ApiError), previewDoc, monaco (workers),
-                     drafts, storage (safe localStorage), collectionTokens (sessionStorage),
-                     url, clipboard, template, time
+                     drafts, storage (safe localStorage), unlockTokens (sessionStorage),
+                     binSettings (labels, pending settings), url, clipboard, template, time
 scripts/add-user.ts  CLI user creation
 test/                *.test.ts, helpers.ts (makeApp), fixtures/client
 ```
@@ -74,14 +75,18 @@ Behaviours worth knowing:
 - Login compares against a dummy bcrypt hash for unknown emails (no timing-based user enumeration) and always answers `401 Invalid email or password`.
 - `updatedAt` is bumped by ≥1ms on every update, and lists are ordered by `updated_at DESC` with insertion order as tiebreaker.
 - Body-parser errors map to JSON: malformed JSON → 400, body > 2MB → 413.
-- `PUT /api/snippets/:id` keeps the stored `visibility` when the body omits it; forks inherit the source's visibility unless overridden.
+- `PUT /api/snippets/:id` changes content only; settings go through `PATCH` (ownership checked before validation, like PUT), so they apply without saving the code. `POST /api/snippets` takes optional `settings`.
 
 ### Access rules (security-critical)
-- **Private bins** answer 404 (never 403) to everyone but the owner, including PUT/DELETE/fork, so their existence doesn't leak. A fork's `forkedFrom` is masked to `null` when the source is private and the viewer isn't the source's owner.
-- **Collections** are owner-only when `password_hash IS NULL` (404 to others, unlock → 404). With a password, a non-owner's `GET` returns exactly `{ locked: true, shareId, title }` — no description, no bins — until `POST /:id/unlock` succeeds. Wrong password → **403** (not 401: the client treats 401 as "log out").
-- Unlock returns a 12h HS256 JWT with `aud: 'bincode:collection'`, `sub: collection.id`, `pv: password_version`. It is sent as `X-Collection-Token` (never as Bearer). User tokens must have no `aud`; `authenticate` rejects tokens that carry one, and `verifyCollectionToken` requires it — the two are not interchangeable.
-- Changing or removing a collection password bumps `password_version`, which revokes every outstanding unlock token.
-- A valid collection token lets `GET /api/snippets/:id` read a **private** bin that is a member of that (still password-protected) collection. It does not grant fork, edit or anything else.
+- **A bin's own visibility is the only thing that decides who reads it.** Collections never grant access to a bin.
+  - `unlisted`: anyone with the link. `private`: owner only — 404 (never 403) to everyone else, including PUT/PATCH/DELETE/fork, so existence doesn't leak. `password`: non-owners get `{ locked: true, reason, shareId, title }` (no code) until `POST /:id/unlock {password}` succeeds.
+  - `forkedFrom` is masked to `null` when the source is private and the viewer isn't the source's owner.
+- **Burn after read**: a non-owner `GET` is always `locked` (`reason: 'burn'` or `'password+burn'`); the content is sent only by `POST /:id/unlock`, which deletes the bin in the same request (`burn()` must report a deleted row, so only one requester gets it). An explicit POST means link-preview bots and React StrictMode double effects can't burn a bin. Owner views never burn.
+- **Expiry**: every read filters `expires_at > now` (`NOT_EXPIRED` in `repos/snippets.ts`), so expired bins are gone immediately; the hourly sweep only reclaims space.
+- **Unlock tokens**: 12h HS256 JWTs with `aud: 'bincode:snippet' | 'bincode:collection'`, `sub: id`, `pv: password_version`, sent as `X-Unlock-Token` (never Bearer). Login tokens must have no `aud`: `authenticate` rejects tokens that carry one, and `hasUnlockToken` requires the right one. Changing or removing a password bumps `password_version`, revoking every outstanding token. Burn bins never get a token.
+- Wrong passwords answer **403**, not 401 — the client treats 401 as "log out".
+- **Reading = forking**: anyone who can read a bin (owner, unlisted, valid unlock token) can fork it. Owners' forks keep visibility + password; everyone else's start as plain unlisted.
+- **Collections** are owner-only when `password_hash IS NULL` (404 to others). With a password, a non-owner's `GET` returns exactly `{ locked: true, shareId, title }` until unlocked; then it lists the collection's **non-private, non-expired** bins only (`snippetCount` is recomputed so private ones aren't even counted). Opening a password bin from the list still goes through that bin's own gate.
 - Membership: both the collection and the bin must belong to the caller. Deleting a collection keeps its bins; deleting a bin cascades its memberships.
 
 ### Rate limits (`createRateLimiters` in `middleware/security.ts`)
@@ -90,19 +95,19 @@ Behaviours worth knowing:
 | `api` | 300/min | IP | all of `/api` except `/api/health` |
 | `login` | 10 failures / 15 min | IP | `POST /api/auth/login` |
 | `loginEmail` | 20 failures / 15 min | normalized email | `POST /api/auth/login` (stops distributed guessing; can lock one account out) |
-| `unlock` | 10 failures / 15 min | IP | `POST /api/collections/:id/unlock` |
-| `unlockCollection` | 50 failures / hour | collection shareId | same (stops distributed guessing; owners never need to unlock) |
+| `unlock` | 10 failures / 15 min | IP | `POST /api/{snippets,collections}/:id/unlock` |
+| `unlockTarget` | 50 failures / hour | `baseUrl` + shareId | same (stops distributed guessing; owners never need to unlock) |
 | `writes` | 60/min | user id | every POST/PUT/DELETE on snippets and collections (after `requireAuth`) |
 
 Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)` **inline** — express-rate-limit inspects the function source and warns otherwise. Client-supplied identifiers (device fingerprints, etc.) are deliberately not used as keys: they are forgeable, so they only weaken limits.
 
 ### Data model
 - `users(id, email UNIQUE, password_hash, created_at)`
-- `snippets(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, html, css, js, visibility CHECK IN ('unlisted','private'), forked_from → snippets ON DELETE SET NULL, created_at, updated_at)`
+- `snippets(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, html, css, js, visibility CHECK IN ('unlisted','password','private'), password_hash, password_version, expires_at, burn_after_read, forked_from → snippets ON DELETE SET NULL, created_at, updated_at, CHECK ((visibility = 'password') = (password_hash IS NOT NULL)))`
 - `collections(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, description, password_hash NULL, password_version, created_at, updated_at)`
 - `collection_snippets(collection_id → collections CASCADE, snippet_id → snippets CASCADE, added_at, PK(collection_id, snippet_id))` — many-to-many
 - The internal `id`s and password hashes never leave the server. Clients only see `shareId` (10-char nanoid); `forkedFrom` is the source's `shareId`.
-- Migrations: `SCHEMA` in `db.ts` is v0 (`CREATE TABLE IF NOT EXISTS`); `MIGRATIONS[i]` upgrades to version `i + 1`, each in a transaction, tracked in `PRAGMA user_version`. Append new entries; never edit one that shipped. `test/migration.test.ts` upgrades a real v0 file.
+- Migrations: `SCHEMA` in `db.ts` is v0 (`CREATE TABLE IF NOT EXISTS`); `MIGRATIONS[i]` upgrades to version `i + 1`, each in a transaction, tracked in `PRAGMA user_version`. Append new entries; never edit one that shipped. SQLite can't alter constraints, so a changed CHECK needs a table rebuild: mark the entry `rebuild: true` and `migrate()` turns foreign keys off around it (outside the transaction, as SQLite requires) and runs `PRAGMA foreign_key_check` before committing (migration 2 is the example). `test/migration.test.ts` upgrades real v0 and v1 files.
 
 ### Preview isolation (security-critical)
 - The preview is `<iframe src="/preview.html" sandbox="allow-scripts allow-modals allow-forms allow-popups">` — **never add `allow-same-origin`**; the opaque origin is what stops snippet code from reading the app's `localStorage` token.
@@ -111,11 +116,12 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 - `srcdoc` is intentionally not used: it would inherit the app's strict CSP and block snippet scripts. `/preview.html` gets its own permissive CSP; `/vendor/*` sends `Cross-Origin-Resource-Policy: cross-origin` so the opaque-origin frame can load Eruda.
 
 ### Client
-- No router: `?share=<id>[&c=<collectionId>]` and `?collection=<id>` + `history.pushState` / `popstate` (`lib/url.ts`). `c` names the collection a bin was opened from so its unlock token (sessionStorage `bincode:ctok:<id>`, tab-scoped on purpose) is sent on reload; a 404 with `c` set sends the visitor back to that collection's gate.
+- No router: `?share=<id>` and `?collection=<id>` + `history.pushState` / `popstate` (`lib/url.ts`). Unlock tokens live in sessionStorage `bincode:unlock:<kind>:<id>` (tab-scoped on purpose) and are sent on reload.
+- **One place for settings**: the toolbar's labelled visibility button (Link / Password / Only me) and each row's gear in My snippets open `BinSettings`: visibility segments, a password field when needed, one "Delete" select (Never / After first view / After 10 min … 1 month — burn and expiry are one choice in the UI), and collection checkboxes (only if the user has collections). For a saved bin "Apply" sends PATCH at once and leaves editor content/dirty alone; for a new bin the choices are kept in App state (`pending`, never in drafts — no passwords in localStorage) and sent with the first POST, then collections are added.
+- Opening a locked bin shows `BinGate`; a burned bin's content is loaded as a **new unsaved bin** so Save makes a copy.
 - State: `AuthProvider` (token in `localStorage['bincode:token']`, validated via `/api/auth/me`) and the `useSnippetEditor` reducer. No state library.
 - Save: not logged in → login then retry; owner → PUT (same link); someone else's → fork; new → POST.
-- Drafts: `localStorage['bincode:draft:<shareId|new>']`, debounced, restored/offered via `DraftBanner`, cleared on save. Drafts carry `visibility` (optional for older drafts).
-- Someone else's private bin (seen through a collection) can't be saved or forked: the toolbar disables Save.
+- Drafts: `localStorage['bincode:draft:<shareId|new>']`, debounced, restored/offered via `DraftBanner`, cleared on save. Drafts hold content only.
 - Monaco is code-split (lazy `EditorPane`) and its workers are bundled with Vite `?worker` imports (`lib/monaco.ts`).
 
 ## Conventions
@@ -124,7 +130,8 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 - New endpoint: add types to `src/shared/api.ts` (and a schema to `schemas.ts`) first, then route + repo, then tests in `test/`.
 - Validate every request body with `validateBody(schema)`; store user content raw (React escapes on render) — never "sanitize" snippet code.
 - Use parameterized prepared statements only.
-- Check ownership for any mutation (`403` for non-owners, `404` for unknown/malformed share ids — and for private bins / owner-only collections the caller can't see).
+- Check ownership for any mutation (`403` for non-owners, `404` for unknown/malformed/expired share ids — and for private bins / owner-only collections the caller can't see).
+- UI: this is a quick tool for devs. Prefer one control over two, short labels over explanatory paragraphs, and hide sections that have nothing in them.
 - Never log passwords or tokens. `add-user` must not echo the password.
 - `index.html` must not contain inline scripts (CSP `script-src 'self'`).
 
@@ -133,7 +140,7 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 
 Also `createCollection(t, email, body?)` and `addToCollection(t, email, collectionId, snippetId)`. Tests that simulate several client IPs set `env: { TRUST_PROXY: '1' }` and send `X-Forwarded-For` (`'true'` triggers an express-rate-limit warning). `writes` also defaults to 10,000 in tests.
 
-Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
+Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.

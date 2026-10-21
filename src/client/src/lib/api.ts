@@ -4,14 +4,18 @@ import type {
   CollectionListResponse,
   CollectionResponse,
   CollectionSummary,
+  CreateSnippetRequest,
   LoginResponse,
   MeResponse,
   Snippet,
   SnippetInput,
   SnippetListResponse,
+  SnippetResponse,
+  SnippetSettingsInput,
   UnlockResponse,
+  UnlockSnippetResponse,
 } from '../../../shared/api.ts';
-import { COLLECTION_TOKEN_HEADER } from '../../../shared/constants.ts';
+import { UNLOCK_TOKEN_HEADER } from '../../../shared/constants.ts';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -95,14 +99,27 @@ export const me = () => request<MeResponse>('GET', '/auth/me');
 
 export const listSnippets = () => request<SnippetListResponse>('GET', '/snippets');
 
-const collectionHeader = (token: string | null | undefined) =>
-  token ? { [COLLECTION_TOKEN_HEADER]: token } : undefined;
+const unlockHeader = (token: string | null | undefined) => (token ? { [UNLOCK_TOKEN_HEADER]: token } : undefined);
 
-/** `collectionToken` unlocks private snippets that belong to a password-protected collection. */
-export const getSnippet = (shareId: string, collectionToken?: string | null) =>
-  request<Snippet>('GET', snippetPath(shareId), undefined, collectionHeader(collectionToken));
+/** `unlockToken` reopens a password bin unlocked earlier; without it such bins come back `locked`. */
+export const getSnippet = (shareId: string, unlockToken?: string | null) =>
+  request<SnippetResponse>('GET', snippetPath(shareId), undefined, unlockHeader(unlockToken));
 
-export const createSnippet = (input: SnippetInput) => request<Snippet>('POST', '/snippets', input);
+/** For the owner's own bins, which are never locked. */
+export async function getOwnSnippet(shareId: string): Promise<Snippet> {
+  const res = await getSnippet(shareId);
+  if ('locked' in res) throw new ApiError(403, 'You do not own this snippet.');
+  return res;
+}
+
+export const unlockSnippet = (shareId: string, password?: string) =>
+  request<UnlockSnippetResponse>('POST', `${snippetPath(shareId)}/unlock`, password ? { password } : {});
+
+export const createSnippet = (input: CreateSnippetRequest) => request<Snippet>('POST', '/snippets', input);
+
+/** Settings apply immediately and never touch the code. */
+export const updateSnippetSettings = (shareId: string, settings: SnippetSettingsInput) =>
+  request<Snippet>('PATCH', snippetPath(shareId), settings);
 
 export const updateSnippet = (shareId: string, input: SnippetInput) =>
   request<Snippet>('PUT', snippetPath(shareId), input);
@@ -110,15 +127,15 @@ export const updateSnippet = (shareId: string, input: SnippetInput) =>
 export const deleteSnippet = (shareId: string) =>
   request<void>('DELETE', snippetPath(shareId));
 
-export const forkSnippet = (shareId: string, input?: Partial<SnippetInput>) =>
-  request<Snippet>('POST', `${snippetPath(shareId)}/fork`, input ?? {});
+export const forkSnippet = (shareId: string, input?: Partial<SnippetInput>, unlockToken?: string | null) =>
+  request<Snippet>('POST', `${snippetPath(shareId)}/fork`, input ?? {}, unlockHeader(unlockToken));
 
 const collectionPath = (shareId: string) => `/collections/${encodeURIComponent(shareId)}`;
 
 export const listCollections = () => request<CollectionListResponse>('GET', '/collections');
 
-export const getCollection = (shareId: string, collectionToken?: string | null) =>
-  request<CollectionResponse>('GET', collectionPath(shareId), undefined, collectionHeader(collectionToken));
+export const getCollection = (shareId: string, unlockToken?: string | null) =>
+  request<CollectionResponse>('GET', collectionPath(shareId), undefined, unlockHeader(unlockToken));
 
 export const createCollection = (input: CollectionInput) =>
   request<CollectionSummary>('POST', '/collections', input);

@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import request from 'supertest';
-import { auth, createSnippet, makeApp } from './helpers.ts';
+import { auth, createSnippet, makeApp, type TestApp } from './helpers.ts';
 
-const PRIVATE = { title: 'Secret', html: '<p>s</p>', css: '', js: '', visibility: 'private' };
+const PRIVATE = { title: 'Secret', html: '<p>s</p>', css: '', js: '', settings: { visibility: 'private' } };
 
-test('snippets default to unlisted', async () => {
+function patch(t: TestApp, email: string, shareId: string, body: Record<string, unknown>) {
+  return request(t.app).patch(`/api/snippets/${shareId}`).set(...auth(t.tokenFor(email))).send(body);
+}
+
+test('snippets default to unlisted with no expiry or burn', async () => {
   const t = makeApp();
   const s = await createSnippet(t, 'alice@example.com');
   assert.equal(s.visibility, 'unlisted');
+  assert.equal(s.expiresAt, null);
+  assert.equal(s.burnAfterRead, false);
   await request(t.app).get(`/api/snippets/${s.shareId}`).expect(200);
 });
 
@@ -21,6 +27,7 @@ test('private snippets are 404 to everyone but the owner', async () => {
   const bob = await request(t.app).get(`/api/snippets/${s.shareId}`).set(...auth(t.tokenFor('bob@example.com'))).expect(404);
   assert.deepEqual(anon.body, { error: 'Snippet not found' });
   assert.deepEqual(bob.body, anon.body);
+  await request(t.app).post(`/api/snippets/${s.shareId}/unlock`).send({}).expect(404);
 
   const own = await request(t.app).get(`/api/snippets/${s.shareId}`).set(...auth(t.tokenFor('alice@example.com'))).expect(200);
   assert.equal(own.body.html, '<p>s</p>');
@@ -31,50 +38,63 @@ test('non-owners get 404, not 403, when mutating a private snippet', async () =>
   const s = await createSnippet(t, 'alice@example.com', PRIVATE);
   const bob = auth(t.tokenFor('bob@example.com'));
   await request(t.app).put(`/api/snippets/${s.shareId}`).set(...bob).send({ title: 'x' }).expect(404);
+  await request(t.app).patch(`/api/snippets/${s.shareId}`).set(...bob).send({ visibility: 'unlisted' }).expect(404);
   await request(t.app).delete(`/api/snippets/${s.shareId}`).set(...bob).expect(404);
   await request(t.app).post(`/api/snippets/${s.shareId}/fork`).set(...bob).send({}).expect(404);
 });
 
-test('PUT keeps visibility when omitted and changes it when given', async () => {
+test('PATCH changes settings without touching content; PUT ignores settings', async () => {
   const t = makeApp();
-  const alice = auth(t.tokenFor('alice@example.com'));
-  const s = await createSnippet(t, 'alice@example.com', PRIVATE);
+  const s = await createSnippet(t, 'alice@example.com');
 
-  const kept = await request(t.app).put(`/api/snippets/${s.shareId}`).set(...alice).send({ title: 'Renamed' }).expect(200);
-  assert.equal(kept.body.visibility, 'private');
+  const patched = await patch(t, 'alice@example.com', s.shareId, { visibility: 'private' }).expect(200);
+  assert.equal(patched.body.visibility, 'private');
+  assert.equal(patched.body.html, s.html);
+  assert.ok(patched.body.updatedAt > s.updatedAt);
+  await request(t.app).get(`/api/snippets/${s.shareId}`).expect(404);
 
-  const changed = await request(t.app)
+  const put = await request(t.app)
     .put(`/api/snippets/${s.shareId}`)
-    .set(...alice)
+    .set(...auth(t.tokenFor('alice@example.com')))
     .send({ title: 'Renamed', visibility: 'unlisted' })
     .expect(200);
-  assert.equal(changed.body.visibility, 'unlisted');
-  await request(t.app).get(`/api/snippets/${s.shareId}`).expect(200);
+  assert.equal(put.body.title, 'Renamed');
+  assert.equal(put.body.visibility, 'private');
 });
 
-test('invalid visibility is a 400', async () => {
+test('PATCH checks ownership before validating', async () => {
   const t = makeApp();
-  await request(t.app)
-    .post('/api/snippets')
-    .set(...auth(t.tokenFor('alice@example.com')))
-    .send({ title: 'x', visibility: 'public' })
-    .expect(400);
+  const s = await createSnippet(t, 'alice@example.com');
+  await patch(t, 'bob@example.com', s.shareId, { visibility: 'nope' }).expect(403);
+  await patch(t, 'alice@example.com', s.shareId, { visibility: 'nope' }).expect(400);
+  await patch(t, 'alice@example.com', s.shareId, { expiresIn: '2y' }).expect(400);
 });
 
-test('forks inherit visibility unless overridden', async () => {
+test('forks: owners keep visibility and password, others start unlisted', async () => {
   const t = makeApp();
   const alice = auth(t.tokenFor('alice@example.com'));
   const s = await createSnippet(t, 'alice@example.com', PRIVATE);
+  const own = await request(t.app).post(`/api/snippets/${s.shareId}/fork`).set(...alice).send({}).expect(201);
+  assert.equal(own.body.visibility, 'private');
 
-  const inherited = await request(t.app).post(`/api/snippets/${s.shareId}/fork`).set(...alice).send({}).expect(201);
-  assert.equal(inherited.body.visibility, 'private');
+  const pw = await createSnippet(t, 'alice@example.com', {
+    title: 'pw',
+    settings: { visibility: 'password', password: 'bin-password', expiresIn: '1d', burnAfterRead: false },
+  });
+  const ownPw = await request(t.app).post(`/api/snippets/${pw.shareId}/fork`).set(...alice).send({}).expect(201);
+  assert.equal(ownPw.body.visibility, 'password');
+  assert.equal(ownPw.body.expiresAt, null);
+  // The copy keeps the password: a visitor still has to unlock it.
+  const locked = await request(t.app).get(`/api/snippets/${ownPw.body.shareId}`).expect(200);
+  assert.equal(locked.body.locked, true);
 
-  const overridden = await request(t.app)
-    .post(`/api/snippets/${s.shareId}/fork`)
-    .set(...alice)
-    .send({ visibility: 'unlisted' })
+  const unlisted = await createSnippet(t, 'alice@example.com');
+  const bobs = await request(t.app)
+    .post(`/api/snippets/${unlisted.shareId}/fork`)
+    .set(...auth(t.tokenFor('bob@example.com')))
+    .send({})
     .expect(201);
-  assert.equal(overridden.body.visibility, 'unlisted');
+  assert.equal(bobs.body.visibility, 'unlisted');
 });
 
 test('forkedFrom is hidden from others once the source turns private', async () => {
@@ -85,7 +105,7 @@ test('forkedFrom is hidden from others once the source turns private', async () 
   const fork = await request(t.app).post(`/api/snippets/${source.shareId}/fork`).set(...bob).send({}).expect(201);
   assert.equal(fork.body.forkedFrom, source.shareId);
 
-  await request(t.app).put(`/api/snippets/${source.shareId}`).set(...alice).send({ title: 'x', visibility: 'private' }).expect(200);
+  await patch(t, 'alice@example.com', source.shareId, { visibility: 'private' }).expect(200);
 
   const asBob = await request(t.app).get(`/api/snippets/${fork.body.shareId}`).set(...bob).expect(200);
   assert.equal(asBob.body.forkedFrom, null);

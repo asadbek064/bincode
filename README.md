@@ -7,9 +7,10 @@ BinCode is a minimalist playground for writing, previewing and sharing HTML/CSS/
 ## Features
 - **Monaco editor** with HTML / CSS / JS tabs (per-tab undo history), dark/light theme following your system
 - **Live preview** in a sandboxed iframe, with pause/resume and an optional in-preview console (Eruda)
-- **Share links** — `/?share=<id>` opens any unlisted snippet read-only for anyone
-- **Private bins** — as many as you like; only you can open them
-- **Collections** — sort bins into any number of collections (a bin can be in several). Keep a collection to yourself, or give it a password: visitors with the link see only its name until they enter it, then can view every bin inside, private ones included
+- **Share links** — `/?share=<id>`; each bin is **Link** (anyone with the link), **Password**, or **Only me**
+- **Self-destructing bins** — delete after the first view, or after 10 minutes to a month
+- **Collections** — group bins (a bin can be in several); keep a collection to yourself or share its list by link + password. Only-me bins are never listed to visitors
+- **One settings button** — the visibility button next to the title (or the gear in My snippets) sets who can open a bin, when it's deleted and its collections; changes apply instantly
 - **My snippets** — list, filter by collection, open, update in place (the share link stays the same) and delete your snippets
 - **Fork** — save your own copy of anyone's shared snippet
 - **Local drafts** — unsaved work is autosaved in your browser and offered back after a reload
@@ -67,7 +68,7 @@ Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY
 ## Security model
 - Snippet previews run in a **sandboxed, opaque-origin iframe** — snippet code cannot read the app's storage, cookies or login token. Inside snippets, `localStorage`/`sessionStorage` are in-memory stand-ins that reset on every re-render.
 - Strict Content-Security-Policy and security headers on the app (helmet); the preview page has its own permissive policy so snippets can load libraries from any CDN.
-- Private bins and owner-only collections answer 404 to everyone else. A password-protected collection sends nothing but its name until the password is verified; unlocks are short-lived, tab-scoped tokens that stop working when the password changes.
+- A bin's own visibility alone decides who can read it; collections never grant access. Only-me bins answer 404 to everyone else. Password bins and collections send nothing but their title until the password is verified; unlocks are short-lived, tab-scoped tokens that stop working when the password changes. Burn-after-read content is only sent by an explicit unlock request, so link previewers can't burn it. Expired bins disappear immediately.
 - Rate limiting on the API, plus failed-attempt limits on login (per IP and per account) and on collection unlocks (per IP and per collection), and a per-user limit on writes.
 - Passwords hashed with bcrypt; tokens are HS256 JWTs.
 - Snippet size limited to 500,000 characters.
@@ -78,13 +79,15 @@ Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY
 | POST | `/api/auth/login` | – | `{email, password}` → `{token, user}` |
 | GET | `/api/auth/me` | ✓ | Current user |
 | GET | `/api/snippets` | ✓ | Your snippets (no code bodies) |
-| POST | `/api/snippets` | ✓ | Create `{title, html, css, js, visibility?}` (`unlisted` \| `private`) |
-| GET | `/api/snippets/:shareId` | – | Get a snippet (`isOwner` when authenticated; `X-Collection-Token` for private bins in an unlocked collection) |
-| PUT | `/api/snippets/:shareId` | owner | Update in place |
+| POST | `/api/snippets` | ✓ | Create `{title, html, css, js, settings?}` |
+| GET | `/api/snippets/:shareId` | – | A snippet, or `{locked, reason, shareId, title}` for password / burn bins (`X-Unlock-Token` reopens an unlocked one) |
+| PATCH | `/api/snippets/:shareId` | owner | Settings `{visibility?: unlisted\|password\|private, password?, expiresIn?: never\|10m\|1h\|1d\|1w\|1m, burnAfterRead?}` |
+| POST | `/api/snippets/:shareId/unlock` | – | `{password?}` → `{snippet, burned, token?}`; deletes burn-after-read bins |
+| PUT | `/api/snippets/:shareId` | owner | Update content in place |
 | DELETE | `/api/snippets/:shareId` | owner | Delete |
 | POST | `/api/snippets/:shareId/fork` | ✓ | Copy into your account (optional content overrides) |
 | GET | `/api/collections` | ✓ | Your collections |
-| POST | `/api/collections` | ✓ | Create `{title, description?, password?}` |
+| POST | `/api/collections` | ✓ | Create `{title, password?}` |
 | GET | `/api/collections/:shareId` | – | Owner: full. Others: `{locked, shareId, title}` until unlocked |
 | PUT | `/api/collections/:shareId` | owner | Update (`password: null` removes it) |
 | DELETE | `/api/collections/:shareId` | owner | Delete (bins are kept) |

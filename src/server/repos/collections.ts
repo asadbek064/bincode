@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import type { CollectionSummary, SnippetSummary } from '../../shared/api.ts';
 import { SHARE_ID_LENGTH } from '../../shared/constants.ts';
 import type { Db } from '../db.ts';
-import { SELECT_SUMMARY, nextUpdatedAt, toSummary } from './snippets.ts';
+import { NOT_EXPIRED, SELECT_SUMMARY, nextUpdatedAt, toSummary, type SummaryRow } from './snippets.ts';
 
 /** Server-side view of a collection; `id`, `userId` and the password hash never leave the server. */
 export interface CollectionRecord extends Omit<CollectionSummary, 'hasPassword' | 'snippetCount'> {
@@ -29,7 +29,10 @@ interface CollectionRow {
 
 const SELECT = `
   SELECT c.id, c.share_id, c.user_id, c.title, c.description, c.password_hash, c.password_version,
-         (SELECT COUNT(*) FROM collection_snippets cs WHERE cs.collection_id = c.id) AS snippet_count,
+         -- strftime matches toISOString(), so expired bins drop out of the count before the sweep runs.
+         (SELECT COUNT(*) FROM collection_snippets cs JOIN snippets s ON s.id = cs.snippet_id
+          WHERE cs.collection_id = c.id
+            AND (s.expires_at IS NULL OR s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))) AS snippet_count,
          c.created_at, c.updated_at
   FROM collections c`;
 
@@ -85,7 +88,7 @@ export function createCollectionsRepo(db: Db) {
   const removeSnippet = db.prepare('DELETE FROM collection_snippets WHERE collection_id = ? AND snippet_id = ?');
   const listSnippets = db.prepare(`${SELECT_SUMMARY}
     JOIN collection_snippets cs ON cs.snippet_id = s.id
-    WHERE cs.collection_id = ?
+    WHERE cs.collection_id = ? AND ${NOT_EXPIRED} AND (? OR s.visibility <> 'private')
     ORDER BY s.updated_at DESC, s.rowid DESC`);
 
   function findByShareId(shareId: string): CollectionRecord | undefined {
@@ -141,8 +144,9 @@ export function createCollectionsRepo(db: Db) {
       if (removeSnippet.run(collection.id, snippetId).changes > 0) bump(collection);
     },
 
-    listSnippets(collectionId: string, viewerId: string | undefined): SnippetSummary[] {
-      const rows = listSnippets.all(collectionId) as unknown as Parameters<typeof toSummary>[0][];
+    /** Visitors never see private bins: a collection organizes bins, it doesn't grant access to them. */
+    listSnippets(collectionId: string, viewerId: string | undefined, opts: { includePrivate: boolean }): SnippetSummary[] {
+      const rows = listSnippets.all(collectionId, new Date().toISOString(), opts.includePrivate ? 1 : 0) as unknown as SummaryRow[];
       return rows.map((r) => toSummary(r, viewerId));
     },
   };

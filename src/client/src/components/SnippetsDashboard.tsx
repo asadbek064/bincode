@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
-import type { CollectionSummary, SnippetSummary } from '../../../shared/api.ts';
+import type { CollectionSummary, Snippet, SnippetSummary } from '../../../shared/api.ts';
 import * as api from '../lib/api.ts';
 import { copyText } from '../lib/clipboard.ts';
 import { relativeTime } from '../lib/time.ts';
 import { collectionUrl, shareUrl } from '../lib/url.ts';
+import { BinSettings } from './BinSettings.tsx';
 import { CollectionForm } from './CollectionForm.tsx';
-import { EditIcon, FolderIcon, LinkIcon, LockIcon, PlusIcon, TrashIcon } from './Icons.tsx';
+import { EditIcon, FolderIcon, LinkIcon, LockIcon, PlusIcon, SettingsIcon, TrashIcon } from './Icons.tsx';
 import { Modal } from './Modal.tsx';
+import { VisibilityIcon } from './Toolbar.tsx';
+import { VISIBILITY_LABELS } from '../lib/binSettings.ts';
 
 interface SnippetsDashboardProps {
   currentShareId: string | null;
   onOpen: (shareId: string) => void;
   onDeleted: (shareId: string) => void;
+  onSettingsApplied: (snippet: Snippet) => void;
   onClose: () => void;
 }
 
@@ -23,21 +27,22 @@ type LoadState =
 /** members of the selected collection; null while loading */
 type Selection = { shareId: string; members: Set<string> | null } | null;
 
-/** collections the bin with the open membership panel belongs to; null while loading */
-type MembershipPanel = { shareId: string; collections: Set<string> | null } | null;
 
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }: SnippetsDashboardProps) {
+export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSettingsApplied, onClose }: SnippetsDashboardProps) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selected, setSelected] = useState<Selection>(null);
   const [editing, setEditing] = useState<{ collection: CollectionSummary | null } | null>(null);
-  const [panel, setPanel] = useState<MembershipPanel>(null);
+  /** bin whose settings panel is open */
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Reloaded after the settings panel closes, since it can change visibility and memberships.
+  const [version, setVersion] = useState(0);
   useEffect(() => {
     let cancelled = false;
     Promise.all([api.listSnippets(), api.listCollections()])
@@ -50,7 +55,13 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
+
+  // The selected collection's members may have changed too.
+  useEffect(() => {
+    if (version > 0 && selected) void select(selected.shareId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
 
   useEffect(() => {
     if (!copied) return;
@@ -64,13 +75,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
   const updateCollections = (fn: (list: CollectionSummary[]) => CollectionSummary[]) =>
     setState((s) => (s.status === 'ready' ? { ...s, collections: fn(s.collections) } : s));
 
-  const adjustCount = (collectionId: string, delta: number) =>
-    updateCollections((list) =>
-      list.map((c) => (c.shareId === collectionId ? { ...c, snippetCount: c.snippetCount + delta } : c)),
-    );
-
   const select = async (shareId: string | null) => {
-    setPanel(null);
     setActionError(null);
     if (!shareId) {
       setSelected(null);
@@ -121,49 +126,19 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
     }
   };
 
-  const togglePanel = async (shareId: string) => {
-    if (panel?.shareId === shareId) {
-      setPanel(null);
-      return;
-    }
-    setPanel({ shareId, collections: null });
-    try {
-      const snippet = await api.getSnippet(shareId);
-      setPanel((cur) => (cur?.shareId === shareId ? { shareId, collections: new Set(snippet.collections ?? []) } : cur));
-    } catch (err) {
-      setActionError(errorMessage(err, 'Could not load collections.'));
-      setPanel(null);
-    }
-  };
-
-  const toggleMembership = async (snippetId: string, collectionId: string, add: boolean) => {
-    const key = `${snippetId}:${collectionId}`;
-    setBusy(key);
-    setActionError(null);
-    try {
-      if (add) await api.addToCollection(collectionId, snippetId);
-      else await api.removeFromCollection(collectionId, snippetId);
-      adjustCount(collectionId, add ? 1 : -1);
-      setPanel((cur) => {
-        if (cur?.shareId !== snippetId || !cur.collections) return cur;
-        const next = new Set(cur.collections);
-        if (add) next.add(collectionId);
-        else next.delete(collectionId);
-        return { ...cur, collections: next };
-      });
-      setSelected((cur) => {
-        if (cur?.shareId !== collectionId || !cur.members) return cur;
-        const members = new Set(cur.members);
-        if (add) members.add(snippetId);
-        else members.delete(snippetId);
-        return { ...cur, members };
-      });
-    } catch (err) {
-      setActionError(errorMessage(err, 'Updating the collection failed.'));
-    } finally {
-      setBusy(null);
-    }
-  };
+  if (settingsFor) {
+    return (
+      <BinSettings
+        mode="saved"
+        shareId={settingsFor}
+        onApplied={onSettingsApplied}
+        onClose={() => {
+          setSettingsFor(null);
+          setVersion((v) => v + 1);
+        }}
+      />
+    );
+  }
 
   if (editing) {
     return (
@@ -219,7 +194,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
                 className={selected?.shareId === c.shareId ? 'collection-link active' : 'collection-link'}
                 aria-current={selected?.shareId === c.shareId ? 'true' : undefined}
                 onClick={() => void select(c.shareId)}
-                title={c.description || c.title}
+                title={c.title}
               >
                 {c.hasPassword ? <LockIcon aria-label="Password protected" /> : <FolderIcon />}
                 <span className="collection-name">{c.title}</span>
@@ -237,9 +212,8 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
               <header className="collection-header">
                 <div className="collection-header-text">
                   <h3>{selectedCollection.title}</h3>
-                  {selectedCollection.description && <p className="muted">{selectedCollection.description}</p>}
                   <p className="snippet-meta">
-                    {selectedCollection.hasPassword ? 'Password protected link' : 'Only you can open it'}
+                    {selectedCollection.hasPassword ? 'Shared by link + password' : 'Only you can open it'}
                   </p>
                 </div>
                 <div className="snippet-actions">
@@ -274,7 +248,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
             {selected && selected.members === null && <p className="muted">Loading…</p>}
             {allSnippets.length === 0 && <p className="muted">No snippets yet. Press Save to create your first one.</p>}
             {selected?.members && visible.length === 0 && allSnippets.length > 0 && (
-              <p className="muted">No bins in this collection yet. Use the folder button on a bin to add it.</p>
+              <p className="muted">Empty. Add bins from their settings (gear button).</p>
             )}
 
             {visible.length > 0 && (
@@ -284,17 +258,17 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
                     <div className="snippet-row">
                       <button type="button" className="snippet-open" onClick={() => onOpen(s.shareId)}>
                         <span className="snippet-title">
-                          {s.title}
-                          {s.visibility === 'private' && (
-                            <span className="badge" title="Only you can open it">
-                              private
+                          {s.visibility !== 'unlisted' && (
+                            <span className="row-icon" title={VISIBILITY_LABELS[s.visibility].hint}>
+                              <VisibilityIcon visibility={s.visibility} />
                             </span>
                           )}
-                          {s.forkedFrom !== null && <span className="badge">fork</span>}
-                          {s.shareId === currentShareId && <span className="badge badge-primary">open</span>}
+                          {s.title}
                         </span>
                         <span className="snippet-meta" title={new Date(s.updatedAt).toLocaleString()}>
                           Updated {relativeTime(s.updatedAt)}
+                          {s.burnAfterRead && ' · deleted after first view'}
+                          {s.expiresAt && ` · deleted ${relativeTime(s.expiresAt)}`}
                         </span>
                       </button>
                       <div className="snippet-actions">
@@ -322,12 +296,11 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
                             <button
                               type="button"
                               className="icon-button"
-                              aria-expanded={panel?.shareId === s.shareId}
-                              onClick={() => void togglePanel(s.shareId)}
-                              aria-label={`Collections for ${s.title}`}
-                              title="Add to collections"
+                              onClick={() => setSettingsFor(s.shareId)}
+                              aria-label={`Settings for ${s.title}`}
+                              title="Visibility, expiry and collections"
                             >
-                              <FolderIcon />
+                              <SettingsIcon />
                             </button>
                             <button
                               type="button"
@@ -343,29 +316,6 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onClose }
                       </div>
                     </div>
 
-                    {panel?.shareId === s.shareId && (
-                      <div className="membership" role="group" aria-label={`Collections for ${s.title}`}>
-                        {panel.collections === null && <span className="muted">Loading…</span>}
-                        {panel.collections && collections.length === 0 && (
-                          <span className="muted">No collections yet. Create one in the sidebar.</span>
-                        )}
-                        {panel.collections &&
-                          collections.map((c) => {
-                            const member = panel.collections!.has(c.shareId);
-                            return (
-                              <label key={c.shareId} className="checkbox-field">
-                                <input
-                                  type="checkbox"
-                                  checked={member}
-                                  disabled={busy === `${s.shareId}:${c.shareId}`}
-                                  onChange={() => void toggleMembership(s.shareId, c.shareId, !member)}
-                                />
-                                <span>{c.title}</span>
-                              </label>
-                            );
-                          })}
-                      </div>
-                    )}
                   </li>
                 ))}
               </ul>

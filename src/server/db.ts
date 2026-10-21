@@ -26,11 +26,21 @@ CREATE TABLE IF NOT EXISTS snippets (
 CREATE INDEX IF NOT EXISTS snippets_user_updated ON snippets (user_id, updated_at DESC);
 `;
 
+interface Migration {
+  sql: string;
+  /**
+   * Rebuilds a table (SQLite can't alter constraints in place). Foreign keys are switched off
+   * around it, as the SQLite docs prescribe, and checked before committing.
+   */
+  rebuild?: boolean;
+}
+
 // Each entry upgrades the schema by one version; PRAGMA user_version records how many have run.
 // Append only — never edit a migration that has shipped.
-const MIGRATIONS: string[] = [
+const MIGRATIONS: Migration[] = [
   // 1: private bins and collections
-  `
+  {
+    sql: `
   ALTER TABLE snippets ADD COLUMN visibility TEXT NOT NULL DEFAULT 'unlisted'
     CHECK (visibility IN ('unlisted', 'private'));
 
@@ -57,6 +67,40 @@ const MIGRATIONS: string[] = [
 
   CREATE INDEX collection_snippets_snippet ON collection_snippets (snippet_id);
   `,
+  },
+  // 2: password-protected bins, expiration and burn after read
+  {
+    rebuild: true,
+    sql: `
+  CREATE TABLE snippets_new (
+    id TEXT PRIMARY KEY,
+    share_id TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL DEFAULT '',
+    css TEXT NOT NULL DEFAULT '',
+    js TEXT NOT NULL DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'unlisted' CHECK (visibility IN ('unlisted', 'password', 'private')),
+    password_hash TEXT,
+    password_version INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT,
+    burn_after_read INTEGER NOT NULL DEFAULT 0 CHECK (burn_after_read IN (0, 1)),
+    forked_from TEXT REFERENCES snippets(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK ((visibility = 'password') = (password_hash IS NOT NULL))
+  );
+
+  INSERT INTO snippets_new (id, share_id, user_id, title, html, css, js, visibility, forked_from, created_at, updated_at)
+    SELECT id, share_id, user_id, title, html, css, js, visibility, forked_from, created_at, updated_at FROM snippets;
+
+  DROP TABLE snippets;
+  ALTER TABLE snippets_new RENAME TO snippets;
+
+  CREATE INDEX snippets_user_updated ON snippets (user_id, updated_at DESC);
+  CREATE INDEX snippets_expires ON snippets (expires_at) WHERE expires_at IS NOT NULL;
+  `,
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -64,15 +108,23 @@ export const SCHEMA_VERSION = MIGRATIONS.length;
 function migrate(db: Db): void {
   const { user_version: current } = db.prepare('PRAGMA user_version').get() as { user_version: number };
   for (let v = current; v < MIGRATIONS.length; v++) {
+    const { sql, rebuild } = MIGRATIONS[v]!;
+    // This pragma is a no-op inside a transaction, so it has to be set before BEGIN.
+    if (rebuild) db.exec('PRAGMA foreign_keys = OFF');
     db.exec('BEGIN');
     try {
-      db.exec(MIGRATIONS[v]!);
+      db.exec(sql);
+      if (rebuild && db.prepare('PRAGMA foreign_key_check').all().length > 0) {
+        throw new Error(`Migration ${v + 1} left foreign key violations`);
+      }
       // PRAGMA does not accept bound parameters; v is a loop integer.
       db.exec(`PRAGMA user_version = ${v + 1}`);
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
       throw err;
+    } finally {
+      if (rebuild) db.exec('PRAGMA foreign_keys = ON');
     }
   }
 }

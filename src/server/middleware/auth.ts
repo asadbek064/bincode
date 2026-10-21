@@ -16,9 +16,10 @@ declare global {
 
 const BEARER = /^Bearer ([^\s]+)$/;
 
-/** Collection unlock tokens carry this audience; user tokens carry none, so neither passes as the other. */
-const COLLECTION_AUDIENCE = 'bincode:collection';
-const COLLECTION_TOKEN_TTL_SECONDS = 12 * 60 * 60;
+/** Unlock tokens carry an audience per kind; login tokens carry none, so none passes as another. */
+export type UnlockKind = 'collection' | 'snippet';
+const AUDIENCE: Record<UnlockKind, string> = { collection: 'bincode:collection', snippet: 'bincode:snippet' };
+const UNLOCK_TOKEN_TTL_SECONDS = 12 * 60 * 60;
 
 export function signToken(config: Config, userId: string): string {
   return jwt.sign({}, config.JWT_SECRET, {
@@ -28,34 +29,37 @@ export function signToken(config: Config, userId: string): string {
   });
 }
 
-export function signCollectionToken(
+export function signUnlockToken(
   config: Config,
-  collection: { id: string; passwordVersion: number },
+  kind: UnlockKind,
+  target: { id: string; passwordVersion: number },
 ): { token: string; expiresAt: string } {
-  const token = jwt.sign({ pv: collection.passwordVersion }, config.JWT_SECRET, {
+  const token = jwt.sign({ pv: target.passwordVersion }, config.JWT_SECRET, {
     algorithm: 'HS256',
-    audience: COLLECTION_AUDIENCE,
-    subject: collection.id,
-    expiresIn: COLLECTION_TOKEN_TTL_SECONDS,
+    audience: AUDIENCE[kind],
+    subject: target.id,
+    expiresIn: UNLOCK_TOKEN_TTL_SECONDS,
   });
-  const expiresAt = new Date(Date.now() + COLLECTION_TOKEN_TTL_SECONDS * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + UNLOCK_TOKEN_TTL_SECONDS * 1000).toISOString();
   return { token, expiresAt };
 }
 
-export interface CollectionGrant {
-  collectionId: string;
-  passwordVersion: number;
-}
-
-/** Returns the grant in a valid collection token, or null for a missing, malformed or expired one. */
-export function verifyCollectionToken(config: Config, token: unknown): CollectionGrant | null {
-  if (typeof token !== 'string' || token.length === 0 || token.length > 2048) return null;
+/**
+ * True when `token` is a valid, unexpired unlock token of this kind for this target at its current
+ * password version (changing the password revokes every token issued before).
+ */
+export function hasUnlockToken(
+  config: Config,
+  kind: UnlockKind,
+  target: { id: string; passwordVersion: number },
+  token: unknown,
+): boolean {
+  if (typeof token !== 'string' || token.length === 0 || token.length > 2048) return false;
   try {
-    const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'], audience: COLLECTION_AUDIENCE });
-    if (typeof payload !== 'object' || typeof payload.sub !== 'string' || typeof payload.pv !== 'number') return null;
-    return { collectionId: payload.sub, passwordVersion: payload.pv };
+    const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'], audience: AUDIENCE[kind] });
+    return typeof payload === 'object' && payload.sub === target.id && payload.pv === target.passwordVersion;
   } catch {
-    return null;
+    return false;
   }
 }
 
