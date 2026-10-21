@@ -27,6 +27,10 @@ interface ToolbarProps {
   saveMode: 'save' | 'update' | 'fork';
   /** show a secondary Fork button (for snippets you own) */
   canFork: boolean;
+  /** a locked, missing or loading bin is on screen: nothing to edit, save or toggle */
+  locked: boolean;
+  /** title of the locked bin, shown read-only */
+  lockedTitle: string | null;
   visibility: Visibility;
   /** the settings button is shown for new snippets and ones you own */
   canEditSettings: boolean;
@@ -98,7 +102,11 @@ export function Toolbar(props: ToolbarProps) {
       </a>
 
       <div className="title-area">
-        {user ? (
+        {props.locked ? (
+          <span className="title-text" title={props.lockedTitle ?? undefined}>
+            {props.lockedTitle ?? ''}
+          </span>
+        ) : user ? (
           <input
             className="title-input"
             type="text"
@@ -114,7 +122,7 @@ export function Toolbar(props: ToolbarProps) {
           </span>
         )}
         {props.dirty && <span className="dirty-dot" title="Unsaved changes" aria-label="Unsaved changes" />}
-        {props.canEditSettings ? (
+        {props.locked ? null : props.canEditSettings ? (
           <button
             type="button"
             className={`settings-button visibility-${props.visibility}`}
@@ -133,7 +141,7 @@ export function Toolbar(props: ToolbarProps) {
         )}
       </div>
 
-      <div className="toggles" role="group" aria-label="View">
+      <div className="toggles" role="group" aria-label="View" hidden={props.locked}>
         <Toggle
           pressed={props.showEditor}
           label="Editor"
@@ -181,16 +189,18 @@ export function Toolbar(props: ToolbarProps) {
             <span className="action-label">My snippets</span>
           </button>
         )}
-        {props.canFork && (
+        {props.canFork && !props.locked && (
           <button type="button" onClick={props.onFork} disabled={saving} title="Save a copy as a new snippet">
             <ForkIcon />
             <span className="action-label">Fork</span>
           </button>
         )}
-        <button type="button" className="primary" onClick={props.onSave} disabled={saving} title={saveTitle}>
-          {saveMode === 'fork' ? <ForkIcon /> : <SaveIcon />}
-          <span className="action-label">{saving ? 'Saving…' : saveLabel}</span>
-        </button>
+        {!props.locked && (
+          <button type="button" className="primary" onClick={props.onSave} disabled={saving} title={saveTitle}>
+            {saveMode === 'fork' ? <ForkIcon /> : <SaveIcon />}
+            <span className="action-label">{saving ? 'Saving…' : saveLabel}</span>
+          </button>
+        )}
         {user ? (
           <button type="button" onClick={props.onLogout} title={`Log out ${user.email}`}>
             Log out

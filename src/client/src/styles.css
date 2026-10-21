@@ -802,6 +802,51 @@ select:focus-visible {
   border-radius: var(--radius);
 }
 
+/* Locked / unavailable bins take the whole workspace: no editor, no demo behind them. */
+.gate-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.gate-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.gate-card h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.link-button {
+  align-self: center;
+  min-height: 0;
+  padding: 0.2rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
+.link-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+
 /* Dashboard and collections */
 .dashboard {
   display: grid;

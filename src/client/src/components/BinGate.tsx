@@ -4,16 +4,19 @@ import type { LockedSnippet, UnlockSnippetResponse } from '../../../shared/api.t
 import { LIMITS } from '../../../shared/constants.ts';
 import * as api from '../lib/api.ts';
 import { ApiError } from '../lib/api.ts';
-import { Modal } from './Modal.tsx';
 
 interface BinGateProps {
   locked: LockedSnippet;
   onUnlocked: (result: UnlockSnippetResponse) => void;
-  onClose: () => void;
+  /** the way out: start a new bin instead */
+  onNew: () => void;
 }
 
-/** Shown instead of a bin that needs a password or burns on reading. Nothing of the bin but its title is loaded yet. */
-export function BinGate({ locked, onUnlocked, onClose }: BinGateProps) {
+/**
+ * Shown in place of the editor for a bin that needs a password or burns on reading. Nothing of the bin
+ * but its title is loaded yet, so there is nothing behind it to show.
+ */
+export function BinGate({ locked, onUnlocked, onNew }: BinGateProps) {
   const needsPassword = locked.reason !== 'burn';
   const burns = locked.reason !== 'password';
   const [password, setPassword] = useState('');
@@ -42,7 +45,8 @@ export function BinGate({ locked, onUnlocked, onClose }: BinGateProps) {
   };
 
   return (
-    <Modal title={locked.title} onClose={onClose} className="modal-narrow">
+    <div className="gate-card">
+      <h2>{locked.title}</h2>
       <form className="form" onSubmit={onSubmit}>
         {needsPassword && <p className="muted">This bin is password protected.</p>}
         {burns && (
@@ -60,6 +64,7 @@ export function BinGate({ locked, onUnlocked, onClose }: BinGateProps) {
               maxLength={LIMITS.passwordMax}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoFocus
             />
           </label>
         )}
@@ -72,6 +77,9 @@ export function BinGate({ locked, onUnlocked, onClose }: BinGateProps) {
           {busy ? 'Opening…' : burns ? 'Open and delete' : 'Unlock'}
         </button>
       </form>
-    </Modal>
+      <button type="button" className="link-button" onClick={onNew}>
+        Or start a new bin
+      </button>
+    </div>
   );
 }

@@ -34,9 +34,16 @@ type ModalState =
   | { type: 'share'; snippet: Snippet }
   | { type: 'snippets' }
   | { type: 'settings' }
-  | { type: 'gate'; locked: LockedSnippet }
   | { type: 'collection'; shareId: string }
   | null;
+
+/**
+ * What the workspace shows. Anything but 'editor' replaces the editor and preview, so a link to a
+ * locked, missing or still-loading bin never shows the demo snippet as if it were the bin.
+ */
+type View = 'editor' | 'blank' | { locked: LockedSnippet } | { unavailable: string };
+
+const NOT_AVAILABLE = "This bin doesn't exist, has expired, or is private.";
 
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -72,12 +79,15 @@ export function App() {
   const [loading, setLoading] = useState(false);
   // Settings for a bin that hasn't been saved yet. Kept out of the editor state so they never reach drafts.
   const [pending, setPending] = useState<PendingSettings>(DEFAULT_PENDING);
+  const [view, setView] = useState<View>(() => (readShareId() || readCollectionId() ? 'blank' : 'editor'));
 
   const stateRef = useRef(state);
   stateRef.current = state;
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
   const savingRef = useRef(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const loadSeq = useRef(0);
   const afterLogin = useRef<(() => void) | null>(null);
 
@@ -94,6 +104,7 @@ export function App() {
       if (!restoreDraft) drafts.dismissOffer();
       setPending(DEFAULT_PENDING);
       dispatch({ type: 'reset', content: content ?? undefined });
+      setView('editor');
     },
     [dispatch, drafts],
   );
@@ -106,6 +117,8 @@ export function App() {
       }
       const seq = ++loadSeq.current;
       setLoading(true);
+      // Keep the current bin on screen while switching between bins; only an empty screen starts blank.
+      if (!stateRef.current.current) setView('blank');
       // Reopens a password bin unlocked earlier in this tab.
       const unlockToken = getUnlockToken('snippet', shareId);
       try {
@@ -124,26 +137,25 @@ export function App() {
           drafts.dismissOffer();
           setPending(DEFAULT_PENDING);
           dispatch({ type: 'reset' });
-          setModal({ type: 'gate', locked: res });
+          setView({ locked: res });
           return;
         }
         setPending(DEFAULT_PENDING);
         dispatch({ type: 'load', snippet: res });
         drafts.checkLoaded(res);
+        setView('editor');
       } catch (err) {
         if (seq !== loadSeq.current) return;
-        if (err instanceof ApiError && (err.status === 404 || err.status === 400)) {
-          replaceShareId(null);
-          startNew(true);
-          notify('error', 'That snippet does not exist, was deleted, or is private.');
-        } else {
-          notify('error', `Could not load the snippet: ${errorMessage(err, 'unknown error')}`);
-        }
+        // The URL stays, so logging in (an owner's private bin) or reloading can retry it.
+        drafts.dismissOffer();
+        dispatch({ type: 'reset' });
+        const missing = err instanceof ApiError && (err.status === 404 || err.status === 400);
+        setView({ unavailable: missing ? NOT_AVAILABLE : `Could not load the bin: ${errorMessage(err, 'unknown error')}` });
       } finally {
         if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [dispatch, drafts, notify, startNew],
+    [dispatch, drafts, startNew],
   );
 
   const openRef = useRef(openSnippet);
@@ -155,7 +167,10 @@ export function App() {
   useEffect(() => {
     const showCollection = () => {
       const collectionId = readCollectionId();
-      if (collectionId) setModal({ type: 'collection', shareId: collectionId });
+      if (collectionId) {
+        setModal({ type: 'collection', shareId: collectionId });
+        setView('blank');
+      }
       else setModal((m) => (m?.type === 'collection' ? null : m));
     };
     void openRef.current(readShareId());
@@ -173,7 +188,8 @@ export function App() {
 
   const save = useCallback(
     async (forceFork = false) => {
-      if (savingRef.current) return;
+      // Nothing to save on a locked, missing or loading bin (and the blank editor must never become a bin).
+      if (savingRef.current || viewRef.current !== 'editor') return;
       if (!api.getAuthToken()) {
         afterLogin.current = () => void save(forceFork);
         setModal({ type: 'login' });
@@ -286,6 +302,7 @@ export function App() {
         replaceShareId(null);
         setPending(DEFAULT_PENDING);
         dispatch({ type: 'reset', content: { title: snippet.title, html: snippet.html, css: snippet.css, js: snippet.js } });
+        setView('editor');
         notify('success', 'This bin was deleted after viewing. Save to keep a copy.');
         return;
       }
@@ -294,15 +311,10 @@ export function App() {
       }
       dispatch({ type: 'load', snippet });
       drafts.checkLoaded(snippet);
+      setView('editor');
     },
     [dispatch, drafts, notify],
   );
-
-  const closeGate = useCallback(() => {
-    setModal(null);
-    replaceShareId(null);
-    startNew(true);
-  }, [startNew]);
 
   // Settings changed elsewhere (the panel or My snippets): refresh the open bin's metadata.
   const onSettingsApplied = useCallback(
@@ -314,6 +326,8 @@ export function App() {
 
   const closeCollection = useCallback(() => {
     setModal(null);
+    // A collection link starts on an empty workspace; leaving its dialog lands on a new bin.
+    setView((v) => (v === 'blank' ? 'editor' : v));
     // Leave the collection link so a reload doesn't reopen the gate.
     if (readCollectionId()) replaceShareId(stateRef.current.current?.shareId ?? null);
   }, []);
@@ -367,6 +381,8 @@ export function App() {
         dirty={state.dirty}
         saveMode={saveMode}
         canFork={!!current?.isOwner}
+        locked={view !== 'editor'}
+        lockedTitle={typeof view === 'object' && 'locked' in view ? view.locked.title : null}
         visibility={current ? current.visibility : pending.visibility}
         canEditSettings={!!user && (!current || current.isOwner)}
         onOpenSettings={() => setModal({ type: 'settings' })}
@@ -402,25 +418,49 @@ export function App() {
       )}
 
       <main className="workspace">
-        <SplitPane
-          showFirst={showEditor}
-          showSecond={showPreview}
-          first={
-            <EditorErrorBoundary>
-              <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
-                <EditorPane
-                  activeTab={activeTab}
-                  onTabChange={selectTab}
-                  values={code}
-                  onChange={onEdit}
-                  onSave={() => void save()}
-                  dark={dark}
-                />
-              </Suspense>
-            </EditorErrorBoundary>
-          }
-          second={<PreviewPane code={code} console={showConsole} paused={paused} />}
-        />
+        {view !== 'editor' && (
+          <div className="gate-screen">
+            {typeof view === 'object' && 'locked' in view && (
+              <BinGate key={view.locked.shareId} locked={view.locked} onUnlocked={onUnlocked} onNew={onNew} />
+            )}
+            {typeof view === 'object' && 'unavailable' in view && (
+              <div className="gate-card" role="alert">
+                <p>{view.unavailable}</p>
+                <div className="form-actions">
+                  {!user && (
+                    <button type="button" className="primary" onClick={() => setModal({ type: 'login' })}>
+                      Log in
+                    </button>
+                  )}
+                  <button type="button" onClick={onNew}>
+                    New bin
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {view === 'editor' && (
+          <SplitPane
+            showFirst={showEditor}
+            showSecond={showPreview}
+            first={
+              <EditorErrorBoundary>
+                <Suspense fallback={<div className="editor-loading">Loading editor…</div>}>
+                  <EditorPane
+                    activeTab={activeTab}
+                    onTabChange={selectTab}
+                    values={code}
+                    onChange={onEdit}
+                    onSave={() => void save()}
+                    dark={dark}
+                  />
+                </Suspense>
+              </EditorErrorBoundary>
+            }
+            second={<PreviewPane code={code} console={showConsole} paused={paused} />}
+          />
+        )}
       </main>
 
       {modal?.type === 'login' && (
@@ -440,7 +480,6 @@ export function App() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === 'gate' && <BinGate locked={modal.locked} onUnlocked={onUnlocked} onClose={closeGate} />}
       {modal?.type === 'settings' &&
         (current?.isOwner ? (
           <BinSettings
