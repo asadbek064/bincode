@@ -1,88 +1,91 @@
-# [BinCode](https://bincode.asadk.dev) - A Complete Self-Hostable JSFiddle Alternative
+# [BinCode](https://bincode.asadk.dev) — a self-hostable JSFiddle alternative
 
-## Overview
-BinCode is a minimalist platform for managing and sharing code snippets, built with Vue.js and SQLite. It runs entirely on your own infrastructure, giving you full control over your data and workflow.
+BinCode is a minimalist playground for writing, previewing and sharing HTML/CSS/JavaScript snippets. It runs entirely on your own infrastructure: one Node process, one SQLite file, no external services or CDNs.
 
-### [DEMO](https://bincode.asadk.dev)
-### [Org-Repo](https://git.sheetjs.com/asadbek064/BinCode)
+### [Demo](https://bincode.asadk.dev) · [Org repo](https://git.sheetjs.com/asadbek064/BinCode)
 
-## Key Features
-- **Self-Contained:** No external dependencies required.
-- **Modern Stack:** Vue.js frontend and SQLite database.
-- **JWT Authentication:** Secure, simple user management.
-- **Instant Sharing:** Generate unique URLs for snippets.
-- **Minimal Setup:** Create users manually to start sharing.
-- **Performance-Focused:** Lightweight and fast.
+## Features
+- **Monaco editor** with HTML / CSS / JS tabs (per-tab undo history), dark/light theme following your system
+- **Live preview** in a sandboxed iframe, with pause/resume and an optional in-preview console (Eruda)
+- **Share links** — `/?share=<id>` opens any snippet read-only for anyone
+- **My snippets** — list, open, update in place (the share link stays the same) and delete your snippets
+- **Fork** — save your own copy of anyone's shared snippet
+- **Local drafts** — unsaved work is autosaved in your browser and offered back after a reload
+- **Resizable split view** that stacks vertically on mobile
+- Keyboard shortcuts: `Ctrl/Cmd+S` save, `Ctrl/Cmd+1/2/3` switch tabs
 
-## Architecture
-- **Frontend:** Vue.js
-- **Database:** SQLite
-- **Authentication:** JWT
-- **Deployment:** Single self-contained server.
+## No sign-ups, by design
+Accounts are created by an admin from the command line. Anyone can view shared snippets; only users can save.
 
-There is no signups its by design just create users manually and they can start commit snippets to share
+## Requirements
+- Node.js **22.13+** (uses the built-in `node:sqlite`)
+- pnpm 10
 
-## Why BinCode?
-
-BinCode is a lightweight, self-hostable tool for teams and individuals needing a simple, reliable solution for code sharing without relying on external services.
-
-## Design Choices
-- **No Signups:** Admins manually create user accounts for simplicity and security.
-- **Self-Hosted:** Ensures privacy and control over your data.
-
-
-## Contributing
-Contributions are welcome, as long as the tool remains lightweight and self-contained.
-
-## Getting Started
-
-### 1. Clone and Install Dependencies
+## Getting started
 
 ```bash
 git clone https://git.sheetjs.com/asadbek064/BinCode.git
 cd BinCode
 pnpm install
+cp .env.example .env        # then set JWT_SECRET to a long random string
+pnpm add-user you@example.com   # prompts for a password (min 8 chars)
 ```
 
-### 2. Set Up Environment Variables
-Create a .env file in the project root and define the following variables:
-```env
-NODE_ENV=development
-PORT=3000
-JWT_SECRET=your-secure-secret-here
-JWT_EXPIRES_IN=7d
-```
-
-### 3. Adding user 
-
-```bash
-node addUser.js "user@email.com" "password"
-```
-
-### 4. Development server
-Before starting the development server, ensure you change the Vue.js library import from `_prod` to `_dev` in [`index.html`](https://git.sheetjs.com/asadbek064/BinCode/src/commit/3e35da0118e8e6b44863b3fee12c1e2dff96b02e/public/index.html#L129).
-
+### Development
 ```bash
 pnpm dev
 ```
+Runs the API on `:3000` (auto-reload) and Vite on **http://localhost:5173** (hot reload, proxies `/api`).
 
-### 5. Production
-Copy .env.example to .env and generate unique secret and change NODE_ENV=production
-1. Copy .env.example to .env:
+### Production
 ```bash
-cp .env.example .env
+pnpm build      # builds the client into dist/client
+pnpm start      # serves the API + built client on $PORT
 ```
+Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY` accordingly so rate limiting sees real client IPs.
 
-2. Generate a unique secret and set NODE_ENV=production in the .env file.
+### Other commands
+| Command | Description |
+|---|---|
+| `pnpm test` | API + unit tests (node:test + supertest, in-memory SQLite) |
+| `pnpm typecheck` | TypeScript checks for server and client |
+| `pnpm add-user <email>` | Create a user (password via prompt, or first line of stdin) |
 
-3. Start the production server
-```
-pnpm start
-````
+## Configuration (`.env`)
+| Variable | Default | Description |
+|---|---|---|
+| `NODE_ENV` | `development` | `production` enforces a ≥32-char `JWT_SECRET` |
+| `PORT` | `3000` | HTTP port |
+| `JWT_SECRET` | — (required) | Secret used to sign login tokens |
+| `JWT_EXPIRES_IN` | `7d` | Token lifetime (`24h`, `30d`, …) |
+| `DB_FILE` | `./bincode.db` | SQLite database file — back this file up |
+| `TRUST_PROXY` | `false` | Express `trust proxy` setting (`1`, `loopback`, a CIDR, …) |
+| `BCRYPT_ROUNDS` | `10` | Password hashing cost |
 
+## Security model
+- Snippet previews run in a **sandboxed, opaque-origin iframe** — snippet code cannot read the app's storage, cookies or login token. (As a consequence, `localStorage` is not available inside snippets.)
+- Strict Content-Security-Policy and security headers on the app (helmet); the preview page has its own permissive policy so snippets can load libraries from any CDN.
+- Rate limiting on the API, with a stricter limit on failed logins.
+- Passwords hashed with bcrypt; tokens are HS256 JWTs.
+- Snippet size limited to 500,000 characters.
 
-### 5. Production
-- For development, using the `_dev` version of Vue.js (vue.global.js) is recommended as it includes debugging tools and warnings.
+## API
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/login` | – | `{email, password}` → `{token, user}` |
+| GET | `/api/auth/me` | ✓ | Current user |
+| GET | `/api/snippets` | ✓ | Your snippets (no code bodies) |
+| POST | `/api/snippets` | ✓ | Create `{title, html, css, js}` |
+| GET | `/api/snippets/:shareId` | – | Get a snippet (`isOwner` when authenticated) |
+| PUT | `/api/snippets/:shareId` | owner | Update in place |
+| DELETE | `/api/snippets/:shareId` | owner | Delete |
+| POST | `/api/snippets/:shareId/fork` | ✓ | Copy into your account (optional content overrides) |
+| GET | `/api/health` | – | Health check |
 
-- For production, switch to the `_prod` version (vue.global.prod.js) to optimize performance.
+Errors are returned as `{ "error": string, "details"?: [{ path, message }] }`.
 
+## Contributing
+Contributions are welcome as long as the tool stays lightweight and self-contained. Please run `pnpm typecheck && pnpm test` before opening a PR.
+
+## License
+Apache License 2.0

@@ -1,9 +1,7 @@
 node_modules
-
-playground.db
-
+dist
 .env
-
-bincode.db
-
-public/libraries/monaco/
+*.db
+*.db-shm
+*.db-wal
+*.log

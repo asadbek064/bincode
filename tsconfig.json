@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["src/server", "src/shared", "scripts", "test", "src/client/src/lib/previewDoc.ts"]
+}

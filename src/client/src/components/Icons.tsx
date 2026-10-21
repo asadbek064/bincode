@@ -1,0 +1,155 @@
+import type { SVGProps } from 'react';
+
+type IconProps = SVGProps<SVGSVGElement>;
+
+// Material Symbols paths on a 960-unit grid, shifted so the viewBox starts at 0.
+function MaterialIcon({ d, ...props }: IconProps & { d: string }) {
+  return (
+    <svg
+      viewBox="0 -960 960 960"
+      width="1em"
+      height="1em"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+export const EyeIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M480-320q75 0 127.5-52.5T660-500q0-75-52.5-127.5T480-680q-75 0-127.5 52.5T300-500q0 75 52.5 127.5T480-320Zm0-72q-45 0-76.5-31.5T372-500q0-45 31.5-76.5T480-608q45 0 76.5 31.5T588-500q0 45-31.5 76.5T480-392Zm0 192q-146 0-266-81.5T40-500q54-137 174-218.5T480-800q146 0 266 81.5T920-500q-54 137-174 218.5T480-200Zm0-300Zm0 220q113 0 207.5-59.5T832-500q-50-101-144.5-160.5T480-720q-113 0-207.5 59.5T128-500q50 101 144.5 160.5T480-280Z"
+  />
+);
+
+export const EyeOffIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="m644-428-58-58q9-47-27-88t-93-32l-58-58q17-8 34.5-12t37.5-4q75 0 127.5 52.5T660-500q0 20-4 37.5T644-428Zm128 126-58-56q38-29 67.5-63.5T832-500q-50-101-143.5-160.5T480-720q-29 0-57 4t-55 12l-62-62q41-17 84-25.5t90-8.5q151 0 269 83.5T920-500q-23 59-60.5 109.5T772-302Zm20 246L624-222q-35 11-70.5 16.5T480-200q-151 0-269-83.5T40-500q21-53 53-98.5t73-81.5L56-792l56-56 736 736-56 56ZM222-624q-29 26-53 57t-41 67q50 101 143.5 160.5T480-280q20 0 39-2.5t39-5.5l-36-38q-11 3-21 4.5t-21 1.5q-75 0-127.5-52.5T300-500q0-11 1.5-21t4.5-21l-84-82Zm319 93Zm-151 75Z"
+  />
+);
+
+export const ConsoleIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H160v400Zm140-40-56-56 103-104-104-104 57-56 160 160-160 160Zm180 0v-80h240v80H480Z"
+  />
+);
+
+export const ConsoleOffIcon = (props: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="1em"
+    height="1em"
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+    {...props}
+  >
+    <path d="M4 20C3.45 20 2.97917 19.8042 2.5875 19.4125C2.19583 19.0208 2 18.55 2 18V6C2 5.45 2.19583 4.97917 2.5875 4.5875C2.97917 4.19583 3.45 4 4 4H20C20.55 4 21.0208 4.19583 21.4125 4.5875C21.8042 4.97917 22 5.45 22 6V18C22 18.55 21.8042 19.0208 21.4125 19.4125C21.0208 19.8042 20.55 20 20 20H4ZM4 18H20V8H4V18ZM7.5 17L6.1 15.6L8.675 13L6.075 10.4L7.5 9L11.5 13L7.5 17ZM12 17V15H18V17H12Z" />
+    <rect x="3.434" y="2" width="26.353" height="2" transform="rotate(45.807 3.434 2)" />
+  </svg>
+);
+
+export const PlayIcon = (props: IconProps) => (
+  <MaterialIcon {...props} d="M320-200v-560l440 280-440 280Zm80-280Zm0 134 210-134-210-134v268Z" />
+);
+
+export const PauseIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M520-200v-560h240v560H520Zm-320 0v-560h240v560H200Zm400-80h80v-400h-80v400Zm-320 0h80v-400h-80v400Zm320-400Zm-320 0Z"
+  />
+);
+
+export const PlusIcon = (props: IconProps) => (
+  <MaterialIcon {...props} d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z" />
+);
+
+export const ListIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M280-600v-80h560v80H280Zm0 160v-80h560v80H280Zm0 160v-80h560v80H280ZM160-600q-17 0-28.5-11.5T120-640q0-17 11.5-28.5T160-680q17 0 28.5 11.5T200-640q0 17-11.5 28.5T160-600Zm0 160q-17 0-28.5-11.5T120-480q0-17 11.5-28.5T160-520q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440Zm0 160q-17 0-28.5-11.5T120-320q0-17 11.5-28.5T160-360q17 0 28.5 11.5T200-320q0 17-11.5 28.5T160-280Z"
+  />
+);
+
+export const SaveIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM480-240q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"
+  />
+);
+
+export const ForkIcon = (props: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="1em"
+    height="1em"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    focusable="false"
+    {...props}
+  >
+    <circle cx="6" cy="5" r="2" />
+    <circle cx="18" cy="5" r="2" />
+    <circle cx="12" cy="19" r="2" />
+    <path d="M6 7v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7M12 12v5" />
+  </svg>
+);
+
+export const LinkIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M440-280H280q-83 0-141.5-58.5T80-480q0-83 58.5-141.5T280-680h160v80H280q-50 0-85 35t-35 85q0 50 35 85t85 35h160v80ZM320-440v-80h320v80H320Zm200 160v-80h160q50 0 85-35t35-85q0-50-35-85t-85-35H520v-80h160q83 0 141.5 58.5T880-480q0 83-58.5 141.5T680-280H520Z"
+  />
+);
+
+export const TrashIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"
+  />
+);
+
+export const CloseIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+  />
+);
+
+// Language marks keep their brand colors; they are identifiers, not UI chrome.
+export const HtmlIcon = (props: IconProps) => (
+  <svg viewBox="0 0 32 32" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
+    <path
+      fill="#E65100"
+      d="m4 4 2 22 10 2 10-2 2-22Zm19.72 7H11.28l.29 3h11.86l-.802 9.335L15.99 25l-6.635-1.646L8.93 19h3.02l.19 2 3.86.77 3.84-.77.29-4H8.84L8 8h16Z"
+    />
+  </svg>
+);
+
+export const CssIcon = (props: IconProps) => (
+  <svg viewBox="0 0 32 32" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
+    <path
+      fill="#42a5f5"
+      d="m29.18 4-3.57 18.36-.33 1.64-4.74 1.57-3.28 1.09L13.21 28 2.87 24.05 4.05 18h4.2l-.44 2.85 6.34 2.42.78-.26 6.52-2.16.17-.83.79-4.02H4.44l.74-3.76.05-.24h17.96l.78-4H6l.78-4z"
+    />
+  </svg>
+);
+
+export const JsIcon = (props: IconProps) => (
+  <svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
+    <path
+      fill="#ffca28"
+      d="M2 2h12v12H2zm3.153 10.027c.267.567.794 1.033 1.694 1.033 1 0 1.686-.533 1.686-1.7V7.507H7.4v3.827c0 .573-.233.72-.6.72-.387 0-.547-.267-.727-.58zm3.987-.12c.333.653 1.007 1.153 2.06 1.153 1.067 0 1.867-.553 1.867-1.573 0-.94-.54-1.36-1.5-1.773l-.28-.12c-.487-.207-.694-.347-.694-.68 0-.274.207-.487.54-.487.32 0 .534.14.727.487l.873-.58c-.366-.64-.886-.887-1.6-.887-1.006 0-1.653.64-1.653 1.487 0 .92.54 1.353 1.353 1.7l.28.12c.52.226.827.366.827.753 0 .32-.3.553-.767.553-.553 0-.873-.286-1.113-.686z"
+    />
+  </svg>
+);
