@@ -20,17 +20,28 @@ src/shared/          The API contract — imported by both server and client
   constants.ts       LIMITS, share-id format, preview paths & message types
   schemas.ts         zod schemas (server-only; client must not import it → keeps zod out of the bundle)
 src/server/
-  index.ts           Entry: loads .env, config, opens DB, listens
+  index.ts           Entry: loads .env, config, opens DB, listens; graceful SIGINT/SIGTERM shutdown
   app.ts             createApp({ db, config, clientDir, limits }) — used by tests too
-  config.ts          Env parsing/validation
+  config.ts          loadConfig() (full) and loadDbConfig() (no JWT; used by add-user)
   db.ts              openDb(file | ':memory:') + schema
-  repos/             users.ts, snippets.ts — prepared statements, row → DTO mapping
-  middleware/        auth (requireAuth/optionalAuth), validate, error (HttpError), security (helmet, rate limits)
+  repos/             users.ts (DuplicateEmailError), snippets.ts (toSnippet DTO mapping)
+  middleware/
+    auth.ts          createAuth(config, users) → { requireAuth, optionalAuth }; signToken(config, userId)
+    validate.ts      validateBody(schema) — replaces req.body with the parsed value
+    error.ts         HttpError, notFound, errorHandler
+    security.ts      securityHeaders() (app vs preview CSP), vendorCorp, createRateLimiters(limits)
   routes/            auth.ts, snippets.ts
 src/client/
   index.html         Vite entry (no inline scripts — strict CSP)
   public/            Copied as-is: preview.html, vendor/eruda.min.js, logo/, favicon.ico
-  src/               main.tsx, App.tsx, styles.css, components/, hooks/, lib/
+  src/
+    main.tsx, App.tsx, styles.css
+    components/      Toolbar, Icons, EditorPane (lazy), PreviewPane, SplitPane, Modal,
+                     LoginModal, ShareModal, SnippetsDashboard, DraftBanner, Toast
+    hooks/           useAuth, useSnippetEditor, useLocalDraft, useKeyboardShortcuts,
+                     useColorScheme, useDebouncedValue
+    lib/             api (typed fetch client, ApiError), previewDoc, monaco (workers),
+                     drafts, storage (safe localStorage), url, clipboard, template, time
 scripts/add-user.ts  CLI user creation
 test/                *.test.ts, helpers.ts (makeApp), fixtures/client
 ```
@@ -51,6 +62,14 @@ Always run `pnpm typecheck && pnpm test` (and `pnpm build` for client changes) b
 
 ### Request flow
 routes → middleware (`requireAuth` / `optionalAuth`, `validateBody(schema)`) → repos → SQLite. Express 5 forwards async errors, so handlers just `throw new HttpError(status, msg)`; `errorHandler` turns everything into `ApiErrorBody` JSON.
+
+Behaviours worth knowing:
+- `/api/health` is mounted **outside** the API rate limiter so monitoring can't trip it.
+- `PUT` checks ownership **before** validating the body, so non-owners always get 403.
+- Fork merges overrides with the source and re-validates the result with `snippetInputSchema` (inherited code + overrides could exceed the 500K cap).
+- Login compares against a dummy bcrypt hash for unknown emails (no timing-based user enumeration) and always answers `401 Invalid email or password`.
+- `updatedAt` is bumped by ≥1ms on every update, and lists are ordered by `updated_at DESC` with insertion order as tiebreaker.
+- Body-parser errors map to JSON: malformed JSON → 400, body > 2MB → 413.
 
 ### Data model
 - `users(id, email UNIQUE, password_hash, created_at)`
@@ -82,7 +101,9 @@ routes → middleware (`requireAuth` / `optionalAuth`, `validateBody(schema)`) �
 - `index.html` must not contain inline scripts (CSP `script-src 'self'`).
 
 ## Testing
-`test/helpers.ts` → `makeApp()` builds an app with an in-memory DB, low bcrypt cost and seeded users (`alice@example.com`, `bob@example.com` / `password123`), and returns `tokenFor(email)`. Each test creates its own app, so tests are independent. Static/CSP tests use `test/fixtures/client`.
+`test/helpers.ts` → `makeApp(opts?)` builds an app with an in-memory DB, bcrypt cost 4 and seeded users (`alice@example.com`, `bob@example.com` / `password123`). It returns `{ app, db, config, users, seeded, tokenFor(email) }`. The API rate limit defaults to 10,000 in tests; rate-limit tests pass lower `limits`. Each test creates its own app, so tests are independent. Static/CSP tests use `test/fixtures/client`.
+
+Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.
@@ -90,6 +111,18 @@ routes → middleware (`requireAuth` / `optionalAuth`, `validateBody(schema)`) �
 - Rate limits are in-memory per process; restarting resets them.
 - JWTs are stateless: logout is client-side and tokens remain valid until expiry (deleting the user invalidates them).
 - `JWT_SECRET` must be ≥ 32 chars when `NODE_ENV=production`.
+- `@vitejs/plugin-react` is pinned to `^5` because v6 requires Vite 8. Upgrade both together.
+- `pnpm start` serves `dist/client`; without `pnpm build` the app responds "Client not built".
 
 ## Environment variables
-`NODE_ENV`, `PORT` (3000), `JWT_SECRET` (required), `JWT_EXPIRES_IN` (7d), `DB_FILE` (./bincode.db), `TRUST_PROXY` (false), `BCRYPT_ROUNDS` (10). See `.env.example`.
+| Variable | Default | Notes |
+|---|---|---|
+| `NODE_ENV` | `development` | `development` \| `production` \| `test` |
+| `PORT` | `3000` | |
+| `JWT_SECRET` | — | Required by the server (not by `add-user`); ≥ 32 chars in production |
+| `JWT_EXPIRES_IN` | `7d` | |
+| `DB_FILE` | `./bincode.db` | |
+| `TRUST_PROXY` | `false` | `false`/empty, `true`, a hop count, or a string such as `loopback` / CIDR |
+| `BCRYPT_ROUNDS` | `10` | 4–15 |
+
+See `.env.example`.
