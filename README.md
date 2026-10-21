@@ -69,7 +69,8 @@ Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY
 - Snippet previews run in a **sandboxed, opaque-origin iframe** — snippet code cannot read the app's storage, cookies or login token. Inside snippets, `localStorage`/`sessionStorage` are in-memory stand-ins that reset on every re-render.
 - Strict Content-Security-Policy and security headers on the app (helmet); the preview page has its own permissive policy so snippets can load libraries from any CDN.
 - A bin's own visibility alone decides who can read it; collections never grant access. Only-me bins answer 404 to everyone else. Password bins and collections send nothing but their title until the password is verified; unlocks are short-lived, tab-scoped tokens that stop working when the password changes. Burn-after-read content is only sent by an explicit unlock request, so link previewers can't burn it. Expired bins disappear immediately.
-- Rate limiting on the API, plus failed-attempt limits on login (per IP and per account) and on collection unlocks (per IP and per collection), and a per-user limit on writes.
+- Rate limiting on the API, plus failed-attempt limits on login (per IP and per account) and on password unlocks (per IP and per bin/collection), and a per-user limit on writes.
+- Per-account quotas (5,000 bins, 200 collections, 50M characters of code), small request bodies everywhere except snippet content, `Cache-Control: no-store` on all API responses, and short server timeouts.
 - Passwords hashed with bcrypt; tokens are HS256 JWTs.
 - Snippet size limited to 500,000 characters.
 

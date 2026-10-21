@@ -21,7 +21,7 @@ src/shared/          The API contract — imported by both server and client
   schemas.ts         zod schemas (server-only; client must not import it → keeps zod out of the bundle)
 src/server/
   index.ts           Entry: loads .env, config, opens DB, hourly expired-bin sweep, listens; graceful shutdown
-  app.ts             createApp({ db, config, clientDir, limits }) — used by tests too
+  app.ts             createApp({ db, config, clientDir, limits, quotas }) — used by tests too
   config.ts          loadConfig() (full) and loadDbConfig() (no JWT; used by add-user)
   db.ts              openDb(file | ':memory:') + base schema + PRAGMA user_version migrations
   repos/             users.ts (DuplicateEmailError), snippets.ts (toSnippet/toSummary DTO mapping),
@@ -31,7 +31,8 @@ src/server/
                      signUnlockToken / hasUnlockToken (bin and collection unlock tokens)
     validate.ts      validateBody(schema) — replaces req.body with the parsed value
     error.ts         HttpError, notFound, errorHandler
-    security.ts      securityHeaders() (app vs preview CSP), vendorCorp, createRateLimiters(limits)
+    security.ts      securityHeaders() (app vs preview CSP), noStore, vendorCorp, createRateLimiters(limits),
+                     Quotas / DEFAULT_QUOTAS
   routes/            auth.ts, snippets.ts, collections.ts
 src/client/
   index.html         Vite entry (no inline scripts — strict CSP)
@@ -74,7 +75,8 @@ Behaviours worth knowing:
 - Fork merges overrides with the source and re-validates the result with `snippetInputSchema` (inherited code + overrides could exceed the 500K cap).
 - Login compares against a dummy bcrypt hash for unknown emails (no timing-based user enumeration) and always answers `401 Invalid email or password`.
 - `updatedAt` is bumped by ≥1ms on every update, and lists are ordered by `updated_at DESC` with insertion order as tiebreaker.
-- Body-parser errors map to JSON: malformed JSON → 400, body > 2MB → 413.
+- Body size: only snippet create/update/fork (`POST /api/snippets`, `PUT /api/snippets/:id`, `POST /api/snippets/:id/fork`) accept up to 2MB; every other body is capped at 16kb, so anonymous endpoints can't be fed megabytes before a limit applies. Malformed JSON → 400, too large → 413.
+- Every `/api` response carries `Cache-Control: no-store` (private / unlocked content must never land in a shared cache; `X-Unlock-Token` isn't `Authorization`, which caches already respect).
 - `PUT /api/snippets/:id` changes content only; settings go through `PATCH` (ownership checked before validation, like PUT), so they apply without saving the code. `POST /api/snippets` takes optional `settings`.
 
 ### Access rules (security-critical)
@@ -94,10 +96,14 @@ Behaviours worth knowing:
 |---|---|---|---|
 | `api` | 300/min | IP | all of `/api` except `/api/health` |
 | `login` | 10 failures / 15 min | IP | `POST /api/auth/login` |
-| `loginEmail` | 20 failures / 15 min | normalized email | `POST /api/auth/login` (stops distributed guessing; can lock one account out) |
+| `loginEmail` | 20 failures / hour | normalized email | `POST /api/auth/login` (stops distributed guessing; can lock one account out) |
 | `unlock` | 10 failures / 15 min | IP | `POST /api/{snippets,collections}/:id/unlock` |
-| `unlockTarget` | 50 failures / hour | `baseUrl` + shareId | same (stops distributed guessing; owners never need to unlock) |
+| `unlockTarget` | 30 failures / hour | `baseUrl` + shareId | same (stops distributed guessing; owners never need to unlock) |
 | `writes` | 60/min | user id | every POST/PUT/DELETE on snippets and collections (after `requireAuth`) |
+
+Quotas (`DEFAULT_QUOTAS`, 403 when exceeded): 5,000 bins, 200 collections and 50M characters of code per account. Storage is checked on create/fork and on PUT (net growth), and counts expired rows until the sweep removes them.
+
+The HTTP server sets `headersTimeout` 15s and `requestTimeout` 30s (slowloris). `TRUST_PROXY=true` logs a startup warning: it lets any client spoof `X-Forwarded-For` and dodge every IP limit; use a hop count.
 
 Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)` **inline** — express-rate-limit inspects the function source and warns otherwise. Client-supplied identifiers (device fingerprints, etc.) are deliberately not used as keys: they are forgeable, so they only weaken limits.
 
@@ -113,6 +119,7 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 - The preview is `<iframe src="/preview.html" sandbox="allow-scripts allow-modals allow-forms allow-popups">` — **never add `allow-same-origin`**; the opaque origin is what stops snippet code from reading the app's `localStorage` token.
 - `preview.html` posts `{type:'bincode:ready'}` to the parent; the parent replies `{type:'bincode:render', doc}` and the frame `document.write`s it. The iframe is remounted for every render.
 - The document is built by the pure function `src/client/src/lib/previewDoc.ts` (escapes `</script` / `</style`, optionally injects Eruda).
+- `/preview.html` also sends a CSP `sandbox allow-scripts allow-modals allow-forms allow-popups` directive, so it has an opaque origin even when opened outside the iframe (e.g. a hostile site `window.open`s it). Its script only renders messages from `window.parent`.
 - `srcdoc` is intentionally not used: it would inherit the app's strict CSP and block snippet scripts. `/preview.html` gets its own permissive CSP; `/vendor/*` sends `Cross-Origin-Resource-Policy: cross-origin` so the opaque-origin frame can load Eruda.
 
 ### Client
@@ -140,7 +147,9 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 
 Also `createCollection(t, email, body?)` and `addToCollection(t, email, collectionId, snippetId)`. Tests that simulate several client IPs set `env: { TRUST_PROXY: '1' }` and send `X-Forwarded-For` (`'true'` triggers an express-rate-limit warning). `writes` also defaults to 10,000 in tests.
 
-Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
+`makeApp({ quotas })` lowers quotas for tests.
+
+Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `security.test.ts` (no-store, preview sandbox, body caps, quotas, access matrix, forged tokens, IDOR, mass assignment), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.

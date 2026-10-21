@@ -13,6 +13,7 @@ import { collectionInputSchema, unlockSchema } from '../../shared/schemas.ts';
 import type { Config } from '../config.ts';
 import { hasUnlockToken, signUnlockToken } from '../middleware/auth.ts';
 import { HttpError } from '../middleware/error.ts';
+import type { Quotas } from '../middleware/security.ts';
 import { validateBody } from '../middleware/validate.ts';
 import { toCollectionSummary, type CollectionData, type CollectionRecord, type CollectionsRepo } from '../repos/collections.ts';
 import type { SnippetRecord, SnippetsRepo } from '../repos/snippets.ts';
@@ -21,6 +22,7 @@ interface CollectionsRouterDeps {
   config: Config;
   collections: CollectionsRepo;
   snippets: SnippetsRepo;
+  quotas: Quotas;
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
   writeLimiter: RequestHandler;
@@ -29,7 +31,7 @@ interface CollectionsRouterDeps {
 }
 
 export function collectionsRouter(deps: CollectionsRouterDeps): Router {
-  const { config, collections, snippets, requireAuth, optionalAuth, writeLimiter, unlockLimiters } = deps;
+  const { config, collections, snippets, quotas, requireAuth, optionalAuth, writeLimiter, unlockLimiters } = deps;
   const router = Router();
 
   function find(req: Request): CollectionRecord | undefined {
@@ -84,6 +86,9 @@ export function collectionsRouter(deps: CollectionsRouterDeps): Router {
   });
 
   router.post('/', requireAuth, writeLimiter, validateBody(collectionInputSchema), async (req, res) => {
+    if (collections.countByUser(req.user!.id) >= quotas.collectionsPerUser) {
+      throw new HttpError(403, `You have reached the limit of ${quotas.collectionsPerUser} collections.`);
+    }
     const record = collections.create(req.user!.id, await toData(req.body as CollectionInput));
     const body: CollectionSummary = toCollectionSummary(record);
     res.status(201).json(body);

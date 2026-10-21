@@ -5,7 +5,15 @@ import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import { createAuth } from './middleware/auth.ts';
 import { errorHandler, notFound } from './middleware/error.ts';
-import { createRateLimiters, securityHeaders, vendorCorp, type RateLimits } from './middleware/security.ts';
+import {
+  DEFAULT_QUOTAS,
+  createRateLimiters,
+  noStore,
+  securityHeaders,
+  vendorCorp,
+  type Quotas,
+  type RateLimits,
+} from './middleware/security.ts';
 import { createCollectionsRepo } from './repos/collections.ts';
 import { createSnippetsRepo } from './repos/snippets.ts';
 import { createUsersRepo } from './repos/users.ts';
@@ -19,9 +27,16 @@ export interface AppOptions {
   /** directory containing the built client (index.html, preview.html, assets/, vendor/) */
   clientDir: string;
   limits?: RateLimits;
+  quotas?: Partial<Quotas>;
 }
 
-export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOptions): express.Application {
+// Only snippet content can be large; everything else (logins, unlocks, settings) is tiny. Keeping the
+// default small means anonymous endpoints can't be fed megabytes to parse before any limit applies.
+const SMALL_BODY = '16kb';
+const SNIPPET_BODY = '2mb';
+const LARGE_BODY_ROUTE = /^\/api\/snippets(?:\/[^/]+(?:\/fork)?)?\/?$/;
+
+export function createApp({ db, config, clientDir: rawClientDir, limits, quotas }: AppOptions): express.Application {
   const clientDir = path.resolve(rawClientDir);
   const app = express();
   const users = createUsersRepo(db);
@@ -29,18 +44,26 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
   const collections = createCollectionsRepo(db);
   const { requireAuth, optionalAuth } = createAuth(config, users);
   const limiters = createRateLimiters(limits);
+  const quota: Quotas = { ...DEFAULT_QUOTAS, ...quotas };
+  const smallJson = express.json({ limit: SMALL_BODY });
+  const snippetJson = express.json({ limit: SNIPPET_BODY });
 
   app.disable('x-powered-by');
   app.set('trust proxy', config.TRUST_PROXY);
   app.use(securityHeaders());
-  // Above the 500K character cap so oversized snippets get a validation error instead of 413.
-  app.use(express.json({ limit: '2mb' }));
+  // Snippet create/update/fork get room above the 500K character cap so oversized code gets a
+  // validation error instead of 413.
+  app.use((req, res, next) => {
+    const large = (req.method === 'POST' || req.method === 'PUT') && LARGE_BODY_ROUTE.test(req.path);
+    (large ? snippetJson : smallJson)(req, res, next);
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
 
   const api = express.Router();
+  api.use(noStore);
   api.use(limiters.api);
   api.use('/auth', authRouter({ config, users, requireAuth, loginLimiters: [limiters.login, limiters.loginEmail] }));
   api.use(
@@ -48,6 +71,7 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
     snippetsRouter({
       config,
       snippets,
+      quotas: quota,
       requireAuth,
       optionalAuth,
       writeLimiter: limiters.writes,
@@ -60,6 +84,7 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
       config,
       collections,
       snippets,
+      quotas: quota,
       requireAuth,
       optionalAuth,
       writeLimiter: limiters.writes,

@@ -22,6 +22,7 @@ import {
 import type { Config } from '../config.ts';
 import { hasUnlockToken, signUnlockToken } from '../middleware/auth.ts';
 import { HttpError } from '../middleware/error.ts';
+import type { Quotas } from '../middleware/security.ts';
 import { validateBody } from '../middleware/validate.ts';
 import {
   DEFAULT_SETTINGS,
@@ -34,6 +35,7 @@ import {
 interface SnippetsRouterDeps {
   config: Config;
   snippets: SnippetsRepo;
+  quotas: Quotas;
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
   writeLimiter: RequestHandler;
@@ -44,7 +46,7 @@ interface SnippetsRouterDeps {
 type ForkInput = Partial<SnippetInput>;
 
 export function snippetsRouter(deps: SnippetsRouterDeps): Router {
-  const { config, snippets, requireAuth, optionalAuth, writeLimiter, unlockLimiters } = deps;
+  const { config, snippets, quotas, requireAuth, optionalAuth, writeLimiter, unlockLimiters } = deps;
   const router = Router();
 
   const isOwner = (record: SnippetRecord, req: Request) => record.userId === req.user?.id;
@@ -80,6 +82,19 @@ export function snippetsRouter(deps: SnippetsRouterDeps): Router {
       return hasUnlockToken(config, 'snippet', record, req.get(UNLOCK_TOKEN_HEADER));
     }
     return true;
+  }
+
+  const codeSize = (c: SnippetInput) => c.html.length + c.css.length + c.js.length;
+
+  /** Caps per account so a single (possibly compromised) account can't fill the disk. */
+  function checkQuota(userId: string, change: { newBin: boolean; addedChars: number; removedChars?: number }) {
+    const usage = snippets.usageOf(userId);
+    if (change.newBin && usage.bins >= quotas.binsPerUser) {
+      throw new HttpError(403, `You have reached the limit of ${quotas.binsPerUser} bins. Delete some first.`);
+    }
+    if (usage.chars - (change.removedChars ?? 0) + change.addedChars > quotas.storagePerUser) {
+      throw new HttpError(403, 'You have reached your storage limit. Delete some bins first.');
+    }
   }
 
   function lockReason(record: SnippetRecord): LockReason {
@@ -123,6 +138,7 @@ export function snippetsRouter(deps: SnippetsRouterDeps): Router {
 
   router.post('/', requireAuth, writeLimiter, validateBody(createSnippetSchema), async (req, res) => {
     const { settings, ...content } = req.body as CreateSnippetRequest;
+    checkQuota(req.user!.id, { newBin: true, addedChars: codeSize(content) });
     const record = snippets.create(req.user!.id, content, await resolveSettings(settings ?? {}, DEFAULT_SETTINGS));
     const body: Snippet = toSnippet(record, req.user!.id, []);
     res.status(201).json(body);
@@ -168,7 +184,10 @@ export function snippetsRouter(deps: SnippetsRouterDeps): Router {
   };
 
   router.put('/:shareId', requireAuth, writeLimiter, ownerFirst, validateBody(snippetInputSchema), (req, res) => {
-    const updated = snippets.update(loadOwned(req), req.body as SnippetInput);
+    const existing = loadOwned(req);
+    const input = req.body as SnippetInput;
+    checkQuota(req.user!.id, { newBin: false, addedChars: codeSize(input), removedChars: codeSize(existing) });
+    const updated = snippets.update(existing, input);
     const body: Snippet = toSnippet(updated, req.user!.id, snippets.collectionsOf(updated.id));
     res.json(body);
   });
@@ -199,6 +218,7 @@ export function snippetsRouter(deps: SnippetsRouterDeps): Router {
       css: overrides.css ?? source.css,
       js: overrides.js ?? source.js,
     });
+    checkQuota(req.user!.id, { newBin: true, addedChars: codeSize(input) });
     // Owners keep who-can-see-it on their own copies; anyone else starts from a plain unlisted bin.
     const settings: SnippetSettings = isOwner(source, req)
       ? { ...DEFAULT_SETTINGS, visibility: source.visibility, passwordHash: source.passwordHash }

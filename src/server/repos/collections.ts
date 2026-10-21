@@ -77,6 +77,7 @@ export function createCollectionsRepo(db: Db) {
   const byShareId = db.prepare(`${SELECT} WHERE c.share_id = ?`);
   const byId = db.prepare(`${SELECT} WHERE c.id = ?`);
   const listByUser = db.prepare(`${SELECT} WHERE c.user_id = ? ORDER BY c.updated_at DESC, c.rowid DESC`);
+  const countByUser = db.prepare('SELECT COUNT(*) AS n FROM collections WHERE user_id = ?');
   const update = db.prepare(`
     UPDATE collections SET title = ?, description = ?, password_hash = ?, password_version = ?, updated_at = ?
     WHERE id = ?`);
@@ -113,6 +114,10 @@ export function createCollectionsRepo(db: Db) {
       const shareId = nanoid(SHARE_ID_LENGTH);
       insert.run(nanoid(), shareId, userId, data.title, data.description ?? '', data.passwordHash ?? null, now, now);
       return findByShareId(shareId)!;
+    },
+
+    countByUser(userId: string): number {
+      return Number((countByUser.get(userId) as { n: number }).n);
     },
 
     listByUser(userId: string): CollectionRecord[] {

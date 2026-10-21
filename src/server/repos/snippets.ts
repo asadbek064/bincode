@@ -169,6 +169,10 @@ export function createSnippetsRepo(db: Db) {
                         updated_at = ?
     WHERE id = ?`);
   const remove = db.prepare('DELETE FROM snippets WHERE id = ?');
+  // Counts every stored row, expired ones included: they take space until the sweep removes them.
+  const usage = db.prepare(`
+    SELECT COUNT(*) AS bins, COALESCE(SUM(length(html) + length(css) + length(js)), 0) AS chars
+    FROM snippets WHERE user_id = ?`);
   const sweep = db.prepare('DELETE FROM snippets WHERE expires_at IS NOT NULL AND expires_at <= ?');
   const collectionsOf = db.prepare(`
     SELECT c.share_id FROM collection_snippets cs
@@ -246,6 +250,11 @@ export function createSnippetsRepo(db: Db) {
 
     sweepExpired(now = nowIso()): number {
       return Number(sweep.run(now).changes);
+    },
+
+    usageOf(userId: string): { bins: number; chars: number } {
+      const row = usage.get(userId) as { bins: number; chars: number };
+      return { bins: Number(row.bins), chars: Number(row.chars) };
     },
 
     collectionsOf(snippetId: string): string[] {

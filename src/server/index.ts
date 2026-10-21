@@ -27,7 +27,15 @@ const server = app.listen(config.PORT, (err?: Error) => {
     process.exit(1);
   }
   console.log(`BinCode listening on http://localhost:${config.PORT} (${config.NODE_ENV})`);
+  if (config.TRUST_PROXY === true) {
+    // Anyone can then set X-Forwarded-For and get a fresh rate-limit bucket per request.
+    console.warn('TRUST_PROXY=true trusts every X-Forwarded-For hop; set the hop count (e.g. 1) instead.');
+  }
 });
+
+// Slow clients (slowloris) shouldn't be able to hold connections open for minutes.
+server.headersTimeout = 15_000;
+server.requestTimeout = 30_000;
 
 function shutdown() {
   clearInterval(sweepTimer);

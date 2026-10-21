@@ -20,11 +20,13 @@ const APP_CSP = {
   frameAncestors: ["'self'"],
 };
 
-// The preview runs arbitrary user code in an opaque-origin sandbox, so it may load anything;
-// only embedding by other sites is restricted.
+// The preview runs arbitrary user code, so it may load anything; only embedding by other sites is
+// restricted. The sandbox directive gives it an opaque origin even if it is opened outside our
+// sandboxed iframe (e.g. in a popup), so snippet code can never run with the app's origin.
 const PREVIEW_CSP = {
   defaultSrc: ['*', 'data:', 'blob:', "'unsafe-inline'", "'unsafe-eval'"],
   frameAncestors: ["'self'"],
+  sandbox: ['allow-scripts', 'allow-modals', 'allow-forms', 'allow-popups'],
 };
 
 export function securityHeaders(): RequestHandler {
@@ -37,6 +39,29 @@ export function securityHeaders(): RequestHandler {
   };
 }
 
+/**
+ * API responses can hold private or password-protected content (and unlock tokens aren't the
+ * Authorization header that shared caches already respect), so nothing under /api may be cached.
+ */
+export const noStore: RequestHandler = (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+};
+
+/** Per-account caps, so one account can't fill the disk. Enforced on create (and on update for storage). */
+export interface Quotas {
+  binsPerUser: number;
+  collectionsPerUser: number;
+  /** combined characters of html + css + js across all of a user's bins */
+  storagePerUser: number;
+}
+
+export const DEFAULT_QUOTAS: Quotas = {
+  binsPerUser: 5_000,
+  collectionsPerUser: 200,
+  storagePerUser: 50_000_000,
+};
+
 /** The preview frame has an opaque origin, so vendored scripts it loads count as cross-origin. */
 export const vendorCorp: RequestHandler = (_req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -48,7 +73,7 @@ export interface RateLimits {
   api?: number;
   /** failed login attempts per 15 minutes, per IP */
   login?: number;
-  /** failed login attempts per 15 minutes, per email (across all IPs) */
+  /** failed login attempts per hour, per email (across all IPs) */
   loginEmail?: number;
   /** failed bin/collection unlocks per 15 minutes, per IP */
   unlock?: number;
@@ -94,7 +119,7 @@ export function createRateLimiters(limits: RateLimits = {}) {
     // Stops a password guess spread across many IPs. Trade-off: an attacker can make one account's
     // login fail for 15 minutes; the per-IP limit alone would let a botnet guess indefinitely.
     loginEmail: limiter({
-      windowMs: 15 * 60_000,
+      windowMs: 60 * 60_000,
       limit: limits.loginEmail ?? 20,
       skipSuccessfulRequests: true,
       keyGenerator: (req) => {
@@ -106,7 +131,7 @@ export function createRateLimiters(limits: RateLimits = {}) {
     // Same idea per bin or collection. Visitors can be locked out for an hour; owners never need to unlock.
     unlockTarget: limiter({
       windowMs: 60 * 60_000,
-      limit: limits.unlockTarget ?? 50,
+      limit: limits.unlockTarget ?? 30,
       skipSuccessfulRequests: true,
       keyGenerator: (req) => `${req.baseUrl}:${String(req.params.shareId)}`,
     }),
