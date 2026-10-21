@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Snippet, SnippetInput } from '../../../shared/api.ts';
 import { clearDraft, loadDraft, pruneDrafts, saveDraft } from '../lib/drafts.ts';
 import type { Draft } from '../lib/drafts.ts';
@@ -53,16 +53,6 @@ export function useLocalDraft(state: EditorState) {
     return () => window.clearTimeout(id);
   }, [state]);
 
-  // Flush immediately on unload so the last second of typing isn't lost.
-  useEffect(() => {
-    const onBeforeUnload = () => {
-      const s = stateRef.current;
-      if (s.dirty) saveDraft(s.current?.shareId ?? null, toDraft(s));
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
-
   /** For a new snippet: the draft to restore automatically, if any. */
   const takeNewDraft = useCallback((): SnippetInput | null => {
     setOffer(null);
@@ -88,6 +78,18 @@ export function useLocalDraft(state: EditorState) {
     setOffer({ shareId: snippet.shareId, draft, stale });
   }, []);
 
+  /** Writes pending edits now, e.g. before navigating to another snippet. */
+  const flush = useCallback(() => {
+    const s = stateRef.current;
+    if (s.dirty) saveDraft(s.current?.shareId ?? null, toDraft(s));
+  }, []);
+
+  // Flush immediately on unload so the last second of typing isn't lost.
+  useEffect(() => {
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, [flush]);
+
   const dismissOffer = useCallback(() => setOffer(null), []);
 
   const discardOffer = useCallback(() => {
@@ -100,5 +102,8 @@ export function useLocalDraft(state: EditorState) {
     if (offerRef.current?.shareId === shareId) setOffer(null);
   }, []);
 
-  return { offer, takeNewDraft, checkLoaded, dismissOffer, discardOffer, clear };
+  return useMemo(
+    () => ({ offer, takeNewDraft, checkLoaded, flush, dismissOffer, discardOffer, clear }),
+    [offer, takeNewDraft, checkLoaded, flush, dismissOffer, discardOffer, clear],
+  );
 }
