@@ -75,7 +75,8 @@ Behaviours worth knowing:
 - `users(id, email UNIQUE, password_hash, created_at)`
 - `snippets(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, html, css, js, forked_from → snippets ON DELETE SET NULL, created_at, updated_at)`
 - The internal `id` never leaves the server. Clients only see `shareId` (10-char nanoid); `forkedFrom` is the source's `shareId`.
-- No migrations: schema is `CREATE TABLE IF NOT EXISTS` in `db.ts`. A schema change currently means deleting the DB file (or adding a migration keyed on `PRAGMA user_version`).
+- Schema version lives in `PRAGMA user_version` (currently 1). `openDb` detects databases from the original JavaScript server (`users.password`, no timestamps), writes a `<DB_FILE>.pre-v2-<time>.bak` copy with `VACUUM INTO`, and migrates users/snippets in place in one transaction (emails lowercased unless that would collide; old bcrypt hashes and share ids are kept, so passwords and share links keep working). Covered by `test/migration.test.ts`.
+- **Never ship a schema change that silently ignores existing tables** — `CREATE TABLE IF NOT EXISTS` does not alter them. Add a migration step keyed on `user_version` and a test that opens a database in the previous layout.
 
 ### Preview isolation (security-critical)
 - The preview is `<iframe src="/preview.html" sandbox="allow-scripts allow-modals allow-forms allow-popups">` — **never add `allow-same-origin`**; the opaque origin is what stops snippet code from reading the app's `localStorage` token.

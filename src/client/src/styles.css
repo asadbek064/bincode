@@ -764,9 +764,15 @@ input:focus-visible {
 
 /* Responsive */
 @media (max-width: 1100px) {
+  /* Visually hidden but still the buttons' accessible names */
   .toggle-label,
   .brand-name {
-    display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   }
 }
 
@@ -791,7 +797,12 @@ input:focus-visible {
   }
 
   .action-label {
-    display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   }
 
   .actions button {

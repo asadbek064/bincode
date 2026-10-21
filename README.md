@@ -44,6 +44,9 @@ pnpm start      # serves the API + built client on $PORT
 ```
 Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY` accordingly so rate limiting sees real client IPs.
 
+### Upgrading from v1 (JavaScript version)
+Keep your existing `bincode.db` and point `DB_FILE` at it. On first start BinCode writes a backup next to it (`bincode.db.pre-v2-<timestamp>.bak`) and upgrades it in place — users keep their passwords and all existing share links keep working.
+
 ### Other commands
 | Command | Description |
 |---|---|
