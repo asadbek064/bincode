@@ -1,27 +1,47 @@
 {
   "name": "bincode",
-  "version": "1.0.0",
-  "description": "A simple self-hosted code playground",
-  "main": "server.js",
+  "version": "2.0.0",
+  "description": "A minimalist, self-hostable code playground (JSFiddle alternative)",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon --ignore public/libraries/ server.js",
-    "postinstall": "mkdir -p public/libraries/monaco && cp -r node_modules/monaco-editor/min/vs public/libraries/monaco/vs"
+    "dev": "concurrently -k -n api,web -c blue,green \"tsx watch --disable-warning=ExperimentalWarning src/server/index.ts\" \"vite\"",
+    "build": "vite build",
+    "start": "NODE_ENV=production tsx --disable-warning=ExperimentalWarning src/server/index.ts",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/client/tsconfig.json",
+    "add-user": "tsx --disable-warning=ExperimentalWarning scripts/add-user.ts"
   },
   "dependencies": {
-    "bcrypt": "^5.1.0",
-    "dotenv": "^16.4.7",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.5.0",
-    "jsonwebtoken": "^9.0.2",
-    "monaco-editor": "0.52.2",
-    "nanoid": "^3.3.4",
-    "sanitize-html": "^2.14.0",
-    "sqlite3": "^5.1.6",
-    "validator": "^13.12.0",
-    "xss": "^1.0.15"
+    "bcryptjs": "^3.0.3",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "nanoid": "^5.1.16",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "@monaco-editor/react": "^4.7.0",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/supertest": "^7.2.1",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "monaco-editor": "0.52.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "supertest": "^7.3.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.7"
   }
 }

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Preview</title>
+  </head>
+  <body>
+    <script>
+      // Runs inside a sandboxed (opaque-origin) iframe. The parent posts the full
+      // document to render; we replace ourselves with it. See src/shared/constants.ts.
+      (function () {
+        window.addEventListener('message', function (event) {
+          if (event.source !== window.parent) return;
+          var data = event.data;
+          if (!data || data.type !== 'bincode:render' || typeof data.doc !== 'string') return;
+          document.open();
+          document.write(data.doc);
+          document.close();
+        });
+        window.parent.postMessage({ type: 'bincode:ready' }, '*');
+      })();
+    </script>
+  </body>
+</html>
