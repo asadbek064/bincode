@@ -26,6 +26,10 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
 /** Called when an authenticated request gets a 401 (expired token, deleted user). */
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;

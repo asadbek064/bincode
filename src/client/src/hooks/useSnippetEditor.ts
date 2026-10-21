@@ -2,10 +2,13 @@ import { useReducer } from 'react';
 import type { Snippet, SnippetInput } from '../../../shared/api.ts';
 import { DEFAULT_SNIPPET } from '../lib/template.ts';
 
-export type CodeField = 'html' | 'css' | 'js';
+export const CODE_FIELDS = ['html', 'css', 'js'] as const;
+export type CodeField = (typeof CODE_FIELDS)[number];
 
 export interface CurrentSnippet {
   shareId: string;
+  /** title as stored on the server */
+  title: string;
   isOwner: boolean;
   forkedFrom: string | null;
   updatedAt: string;
@@ -25,6 +28,8 @@ export type EditorAction =
   | { type: 'restore'; content: SnippetInput }
   /** start a new snippet, optionally from given content */
   | { type: 'reset'; content?: SnippetInput }
+  /** update snippet metadata (e.g. ownership after login/logout) without touching content */
+  | { type: 'meta'; current: CurrentSnippet | null }
   /** `sent` is the content that was submitted, to detect edits made meanwhile */
   | { type: 'saved'; snippet: Snippet; sent: SnippetInput };
 
@@ -32,9 +37,10 @@ export function sameContent(a: SnippetInput, b: SnippetInput): boolean {
   return a.title === b.title && a.html === b.html && a.css === b.css && a.js === b.js;
 }
 
-function toCurrent(snippet: Snippet): CurrentSnippet {
+export function toCurrent(snippet: Snippet): CurrentSnippet {
   return {
     shareId: snippet.shareId,
+    title: snippet.title,
     isOwner: snippet.isOwner,
     forkedFrom: snippet.forkedFrom,
     updatedAt: snippet.updatedAt,
@@ -61,6 +67,8 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
         dirty: action.content !== undefined,
       };
     }
+    case 'meta':
+      return { ...state, current: action.current };
     case 'restore':
       return { ...state, ...action.content, dirty: true };
     case 'reset':
