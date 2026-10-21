@@ -63,7 +63,7 @@ Put it behind a reverse proxy (nginx, Caddy, …) for HTTPS and set `TRUST_PROXY
 | `BCRYPT_ROUNDS` | `10` | Password hashing cost |
 
 ## Security model
-- Snippet previews run in a **sandboxed, opaque-origin iframe** — snippet code cannot read the app's storage, cookies or login token. (As a consequence, `localStorage` is not available inside snippets.)
+- Snippet previews run in a **sandboxed, opaque-origin iframe** — snippet code cannot read the app's storage, cookies or login token. Inside snippets, `localStorage`/`sessionStorage` are in-memory stand-ins that reset on every re-render.
 - Strict Content-Security-Policy and security headers on the app (helmet); the preview page has its own permissive policy so snippets can load libraries from any CDN.
 - Rate limiting on the API, with a stricter limit on failed logins.
 - Passwords hashed with bcrypt; tokens are HS256 JWTs.

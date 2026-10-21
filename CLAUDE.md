@@ -107,7 +107,7 @@ Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `http.test.ts` (
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.
-- Snippets cannot use `localStorage`/cookies (sandboxed opaque origin) — this is intended.
+- Snippets get in-memory `localStorage`/`sessionStorage` shims (`STORAGE_SHIM` in `previewDoc.ts`) because real storage throws in the opaque-origin sandbox; data resets on every re-render and cookies are unavailable. This is intended.
 - Rate limits are in-memory per process; restarting resets them.
 - JWTs are stateless: logout is client-side and tokens remain valid until expiry (deleting the user invalidates them).
 - `JWT_SECRET` must be ≥ 32 chars when `NODE_ENV=production`.
