@@ -4,10 +4,11 @@ import { Modal } from './Modal.tsx';
 
 interface ShareModalProps {
   url: string;
+  isPrivate: boolean;
   onClose: () => void;
 }
 
-export function ShareModal({ url, onClose }: ShareModalProps) {
+export function ShareModal({ url, isPrivate, onClose }: ShareModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -30,7 +31,11 @@ export function ShareModal({ url, onClose }: ShareModalProps) {
 
   return (
     <Modal title="Share snippet" onClose={onClose}>
-      <p className="muted">Anyone with this link can view and fork your snippet.</p>
+      <p className="muted">
+        {isPrivate
+          ? 'This snippet is private: the link only works for you, or for visitors who unlocked a password-protected collection that contains it.'
+          : 'Anyone with this link can view and fork your snippet.'}
+      </p>
       <div className="share-row">
         <input
           ref={inputRef}

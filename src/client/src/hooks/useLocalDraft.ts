@@ -20,13 +20,14 @@ function toDraft(state: EditorState): Draft {
     html: state.html,
     css: state.css,
     js: state.js,
+    visibility: state.visibility,
     savedAt: Date.now(),
     baseUpdatedAt: state.current?.updatedAt ?? null,
   };
 }
 
 function contentOf(d: SnippetInput): SnippetInput {
-  return { title: d.title, html: d.html, css: d.css, js: d.js };
+  return { title: d.title, html: d.html, css: d.css, js: d.js, visibility: d.visibility };
 }
 
 /**
@@ -67,7 +68,9 @@ export function useLocalDraft(state: EditorState) {
       setOffer(null);
       return;
     }
-    if (sameContent(contentOf(draft), contentOf(snippet))) {
+    // Drafts from before private bins have no visibility; they can't have changed it.
+    const draftContent = { ...contentOf(draft), visibility: draft.visibility ?? snippet.visibility };
+    if (sameContent(draftContent, contentOf(snippet))) {
       clearDraft(snippet.shareId);
       setOffer(null);
       return;

@@ -6,9 +6,11 @@ import type { Db } from './db.ts';
 import { createAuth } from './middleware/auth.ts';
 import { errorHandler, notFound } from './middleware/error.ts';
 import { createRateLimiters, securityHeaders, vendorCorp, type RateLimits } from './middleware/security.ts';
+import { createCollectionsRepo } from './repos/collections.ts';
 import { createSnippetsRepo } from './repos/snippets.ts';
 import { createUsersRepo } from './repos/users.ts';
 import { authRouter } from './routes/auth.ts';
+import { collectionsRouter } from './routes/collections.ts';
 import { snippetsRouter } from './routes/snippets.ts';
 
 export interface AppOptions {
@@ -24,6 +26,7 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
   const app = express();
   const users = createUsersRepo(db);
   const snippets = createSnippetsRepo(db);
+  const collections = createCollectionsRepo(db);
   const { requireAuth, optionalAuth } = createAuth(config, users);
   const limiters = createRateLimiters(limits);
 
@@ -39,8 +42,23 @@ export function createApp({ db, config, clientDir: rawClientDir, limits }: AppOp
 
   const api = express.Router();
   api.use(limiters.api);
-  api.use('/auth', authRouter({ config, users, requireAuth, loginLimiter: limiters.login }));
-  api.use('/snippets', snippetsRouter({ snippets, requireAuth, optionalAuth }));
+  api.use('/auth', authRouter({ config, users, requireAuth, loginLimiters: [limiters.login, limiters.loginEmail] }));
+  api.use(
+    '/snippets',
+    snippetsRouter({ config, snippets, collections, requireAuth, optionalAuth, writeLimiter: limiters.writes }),
+  );
+  api.use(
+    '/collections',
+    collectionsRouter({
+      config,
+      collections,
+      snippets,
+      requireAuth,
+      optionalAuth,
+      writeLimiter: limiters.writes,
+      unlockLimiters: [limiters.unlock, limiters.unlockCollection],
+    }),
+  );
   api.use(notFound);
   app.use('/api', api);
 

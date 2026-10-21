@@ -12,15 +12,16 @@ interface AuthRouterDeps {
   config: Config;
   users: UsersRepo;
   requireAuth: RequestHandler;
-  loginLimiter: RequestHandler;
+  /** per-IP and per-email limiters, applied in order */
+  loginLimiters: RequestHandler[];
 }
 
-export function authRouter({ config, users, requireAuth, loginLimiter }: AuthRouterDeps): Router {
+export function authRouter({ config, users, requireAuth, loginLimiters }: AuthRouterDeps): Router {
   const router = Router();
   // Unknown emails still pay for a bcrypt compare so response time doesn't reveal which accounts exist.
   const dummyHash = bcrypt.hashSync('dummy-password-for-timing', config.BCRYPT_ROUNDS);
 
-  router.post('/login', loginLimiter, validateBody(loginSchema), async (req, res) => {
+  router.post('/login', ...loginLimiters, validateBody(loginSchema), async (req, res) => {
     const { email, password } = req.body as LoginRequest;
     const user = users.findByEmail(email);
     const ok = await bcrypt.compare(password, user?.passwordHash ?? dummyHash);

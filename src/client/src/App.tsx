@@ -2,6 +2,7 @@ import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import type { SnippetInput } from '../../shared/api.ts';
 import { DEFAULT_TITLE } from '../../shared/constants.ts';
+import { CollectionView } from './components/CollectionView.tsx';
 import { DraftBanner } from './components/DraftBanner.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
 import { PreviewPane } from './components/PreviewPane.tsx';
@@ -19,12 +20,27 @@ import { CODE_FIELDS, toCurrent, useSnippetEditor } from './hooks/useSnippetEdit
 import type { CodeField } from './hooks/useSnippetEditor.ts';
 import * as api from './lib/api.ts';
 import { ApiError } from './lib/api.ts';
-import { onShareIdChange, pushShareId, readShareId, replaceShareId, shareUrl } from './lib/url.ts';
+import { getCollectionToken } from './lib/collectionTokens.ts';
+import {
+  onShareIdChange,
+  pushCollectionId,
+  pushShareId,
+  readCollectionId,
+  readShareId,
+  readViaCollection,
+  replaceShareId,
+  shareUrl,
+} from './lib/url.ts';
 
 // Monaco is ~3MB; loading it lazily lets the toolbar and preview paint first.
 const EditorPane = lazy(() => import('./components/EditorPane.tsx'));
 
-type ModalState = { type: 'login' } | { type: 'share'; url: string } | { type: 'snippets' } | null;
+type ModalState =
+  | { type: 'login' }
+  | { type: 'share'; url: string; isPrivate: boolean }
+  | { type: 'snippets' }
+  | { type: 'collection'; shareId: string; notice?: string }
+  | null;
 
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -89,13 +105,16 @@ export function App() {
       }
       const seq = ++loadSeq.current;
       setLoading(true);
+      // Opened from a collection: its unlock token grants access to private bins in it.
+      const via = readViaCollection();
+      const collectionToken = getCollectionToken(via);
       try {
         let snippet;
         try {
-          snippet = await api.getSnippet(shareId);
+          snippet = await api.getSnippet(shareId, collectionToken);
         } catch (err) {
           // A stale token gets us logged out by the 401 handler; retry anonymously.
-          if (err instanceof ApiError && err.status === 401) snippet = await api.getSnippet(shareId);
+          if (err instanceof ApiError && err.status === 401) snippet = await api.getSnippet(shareId, collectionToken);
           else throw err;
         }
         if (seq !== loadSeq.current) return;
@@ -104,9 +123,15 @@ export function App() {
       } catch (err) {
         if (seq !== loadSeq.current) return;
         if (err instanceof ApiError && (err.status === 404 || err.status === 400)) {
-          notify('error', 'That snippet does not exist or was deleted.');
           replaceShareId(null);
           startNew(true);
+          if (via) {
+            // Most likely the unlock expired or the password changed: send them back to the gate.
+            pushCollectionId(via);
+            setModal({ type: 'collection', shareId: via, notice: 'Unlock the collection again to open that snippet.' });
+          } else {
+            notify('error', 'That snippet does not exist or was deleted.');
+          }
         } else {
           notify('error', `Could not load the snippet: ${errorMessage(err, 'unknown error')}`);
         }
@@ -124,10 +149,17 @@ export function App() {
 
   // Initial load and browser back/forward. Mount-only, hence the refs.
   useEffect(() => {
+    const showCollection = () => {
+      const collectionId = readCollectionId();
+      if (collectionId) setModal({ type: 'collection', shareId: collectionId });
+      else setModal((m) => (m?.type === 'collection' ? null : m));
+    };
     void openRef.current(readShareId());
+    showCollection();
     return onShareIdChange((shareId) => {
       flushRef.current();
       void openRef.current(shareId);
+      showCollection();
     });
   }, []);
 
@@ -144,7 +176,7 @@ export function App() {
         return;
       }
       const s = stateRef.current;
-      const sent: SnippetInput = { title: s.title, html: s.html, css: s.css, js: s.js };
+      const sent: SnippetInput = { title: s.title, html: s.html, css: s.css, js: s.js, visibility: s.visibility };
       const current = s.current;
       savingRef.current = true;
       setSaving(true);
@@ -156,14 +188,17 @@ export function App() {
           notify('success', 'Saved');
         } else {
           // Leave the title out of an unrenamed fork so the server names it "… (fork)".
-          const forkInput = current && s.title === current.title ? { html: s.html, css: s.css, js: s.js } : sent;
+          const forkInput =
+            current && s.title === current.title
+              ? { html: s.html, css: s.css, js: s.js, visibility: s.visibility }
+              : sent;
           const snippet = current
             ? await api.forkSnippet(current.shareId, forkInput)
             : await api.createSnippet(sent);
           dispatch({ type: 'saved', snippet, sent });
           drafts.clear(current ? current.shareId : null);
           pushShareId(snippet.shareId);
-          setModal({ type: 'share', url: shareUrl(snippet.shareId) });
+          setModal({ type: 'share', url: shareUrl(snippet.shareId), isPrivate: snippet.visibility === 'private' });
         }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
@@ -222,15 +257,24 @@ export function App() {
   }, [drafts, startNew]);
 
   const navigateTo = useCallback(
-    (shareId: string) => {
+    (shareId: string, via?: string) => {
       setModal(null);
-      if (stateRef.current.current?.shareId === shareId) return;
+      if (stateRef.current.current?.shareId === shareId) {
+        if (via) replaceShareId(shareId, via);
+        return;
+      }
       drafts.flush();
-      pushShareId(shareId);
+      pushShareId(shareId, via);
       void openSnippet(shareId);
     },
     [drafts, openSnippet],
   );
+
+  const closeCollection = useCallback(() => {
+    setModal(null);
+    // Leave the collection link so a reload doesn't reopen the gate.
+    if (readCollectionId()) replaceShareId(stateRef.current.current?.shareId ?? null);
+  }, []);
 
   const onDeleted = useCallback(
     (shareId: string) => {
@@ -256,7 +300,7 @@ export function App() {
 
   useKeyboardShortcuts({
     onSave: () => {
-      if (!modal) void save();
+      if (!modal && canSave) void save();
     },
     onTab: (index) => {
       const tab = CODE_FIELDS[index];
@@ -271,6 +315,8 @@ export function App() {
 
   const current = state.current;
   const saveMode = !current ? 'save' : current.isOwner ? 'update' : 'fork';
+  // A private bin opened through a collection can be viewed but the server refuses to fork it.
+  const canSave = !current || current.isOwner || current.visibility !== 'private';
 
   return (
     <div className="app">
@@ -281,6 +327,12 @@ export function App() {
         dirty={state.dirty}
         saveMode={saveMode}
         canFork={!!current?.isOwner}
+        canSave={canSave}
+        visibility={state.visibility}
+        canChangeVisibility={!!user && (!current || current.isOwner)}
+        onToggleVisibility={() =>
+          dispatch({ type: 'visibility', value: state.visibility === 'private' ? 'unlisted' : 'private' })
+        }
         saving={saving}
         showEditor={showEditor}
         showPreview={showPreview}
@@ -304,8 +356,8 @@ export function App() {
         <DraftBanner
           offer={drafts.offer}
           onRestore={() => {
-            const { title, html, css, js } = drafts.offer!.draft;
-            dispatch({ type: 'restore', content: { title, html, css, js } });
+            const { title, html, css, js, visibility } = drafts.offer!.draft;
+            dispatch({ type: 'restore', content: { title, html, css, js, visibility } });
             drafts.dismissOffer();
           }}
           onDiscard={drafts.discardOffer}
@@ -324,7 +376,9 @@ export function App() {
                   onTabChange={selectTab}
                   values={code}
                   onChange={onEdit}
-                  onSave={() => void save()}
+                  onSave={() => {
+                    if (canSave) void save();
+                  }}
                   dark={dark}
                 />
               </Suspense>
@@ -343,11 +397,22 @@ export function App() {
           onSuccess={() => void onLoginSuccess()}
         />
       )}
-      {modal?.type === 'share' && <ShareModal url={modal.url} onClose={() => setModal(null)} />}
+      {modal?.type === 'share' && (
+        <ShareModal url={modal.url} isPrivate={modal.isPrivate} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'collection' && (
+        <CollectionView
+          key={modal.shareId}
+          shareId={modal.shareId}
+          notice={modal.notice}
+          onOpen={navigateTo}
+          onClose={closeCollection}
+        />
+      )}
       {modal?.type === 'snippets' && (
         <SnippetsDashboard
           currentShareId={current?.shareId ?? null}
-          onOpen={navigateTo}
+          onOpen={(shareId) => navigateTo(shareId)}
           onDeleted={onDeleted}
           onClose={() => setModal(null)}
         />

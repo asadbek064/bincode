@@ -1,6 +1,6 @@
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
-import type { Snippet } from '../src/shared/api.ts';
+import type { CollectionSummary, Snippet } from '../src/shared/api.ts';
 import { createApp } from '../src/server/app.ts';
 import { loadConfig, type Config } from '../src/server/config.ts';
 import { openDb } from '../src/server/db.ts';
@@ -35,7 +35,7 @@ export function makeApp(opts: MakeAppOptions = {}) {
     bob: users.create('bob@example.com', passwordHash),
   };
   // Generous by default so tests that make many requests don't trip the limiter.
-  const app = createApp({ db, config, clientDir: CLIENT_DIR, limits: { api: 10_000, ...opts.limits } });
+  const app = createApp({ db, config, clientDir: CLIENT_DIR, limits: { api: 10_000, writes: 10_000, ...opts.limits } });
 
   function tokenFor(email: string): string {
     const user = users.findByEmail(email);
@@ -63,4 +63,24 @@ export async function createSnippet(
     .send(body)
     .expect(201);
   return res.body as Snippet;
+}
+
+export async function createCollection(
+  t: TestApp,
+  email: string,
+  body: Record<string, unknown> = { title: 'My collection' },
+): Promise<CollectionSummary> {
+  const res = await request(t.app)
+    .post('/api/collections')
+    .set(...auth(t.tokenFor(email)))
+    .send(body)
+    .expect(201);
+  return res.body as CollectionSummary;
+}
+
+export async function addToCollection(t: TestApp, email: string, collectionId: string, snippetId: string) {
+  await request(t.app)
+    .put(`/api/collections/${collectionId}/snippets/${snippetId}`)
+    .set(...auth(t.tokenFor(email)))
+    .expect(204);
 }

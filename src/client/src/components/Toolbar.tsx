@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { LIMITS } from '../../../shared/constants.ts';
-import type { User } from '../../../shared/api.ts';
+import type { User, Visibility } from '../../../shared/api.ts';
 import {
   ConsoleIcon,
   ConsoleOffIcon,
@@ -8,6 +8,8 @@ import {
   EyeOffIcon,
   ForkIcon,
   ListIcon,
+  LockIcon,
+  LockOpenIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
@@ -23,6 +25,12 @@ interface ToolbarProps {
   saveMode: 'save' | 'update' | 'fork';
   /** show a secondary Fork button (for snippets you own) */
   canFork: boolean;
+  /** false for someone else's private snippet: it can be viewed (via a collection) but not copied */
+  canSave: boolean;
+  visibility: Visibility;
+  /** the visibility toggle is shown for new snippets and ones you own */
+  canChangeVisibility: boolean;
+  onToggleVisibility: () => void;
   saving: boolean;
   showEditor: boolean;
   showPreview: boolean;
@@ -61,8 +69,9 @@ function Toggle({ pressed, label, title, onClick, on, off }: ToggleProps) {
 export function Toolbar(props: ToolbarProps) {
   const { user, title, saveMode, saving } = props;
   const saveLabel = saveMode === 'fork' ? 'Fork' : 'Save';
-  const saveTitle =
-    saveMode === 'fork'
+  const saveTitle = !props.canSave
+    ? "Private snippets can't be forked"
+    : saveMode === 'fork'
       ? 'Save a copy of this snippet to your account (Ctrl+S)'
       : saveMode === 'update'
         ? 'Save changes to this snippet (Ctrl+S)'
@@ -100,6 +109,28 @@ export function Toolbar(props: ToolbarProps) {
           </span>
         )}
         {props.dirty && <span className="dirty-dot" title="Unsaved changes" aria-label="Unsaved changes" />}
+        {props.canChangeVisibility ? (
+          <button
+            type="button"
+            className={props.visibility === 'private' ? 'toggle toggle-private' : 'toggle'}
+            aria-pressed={props.visibility === 'private'}
+            onClick={props.onToggleVisibility}
+            title={
+              props.visibility === 'private'
+                ? 'Private: only you can open it. Click to make it unlisted (anyone with the link).'
+                : 'Unlisted: anyone with the link can open it. Click to make it private.'
+            }
+          >
+            {props.visibility === 'private' ? <LockIcon /> : <LockOpenIcon />}
+            <span className="toggle-label">{props.visibility === 'private' ? 'Private' : 'Unlisted'}</span>
+          </button>
+        ) : (
+          props.visibility === 'private' && (
+            <span className="badge" title="Private snippet, shared with you through a collection">
+              private
+            </span>
+          )
+        )}
       </div>
 
       <div className="toggles" role="group" aria-label="View">
@@ -156,7 +187,13 @@ export function Toolbar(props: ToolbarProps) {
             <span className="action-label">Fork</span>
           </button>
         )}
-        <button type="button" className="primary" onClick={props.onSave} disabled={saving} title={saveTitle}>
+        <button
+          type="button"
+          className="primary"
+          onClick={props.onSave}
+          disabled={saving || !props.canSave}
+          title={saveTitle}
+        >
           {saveMode === 'fork' ? <ForkIcon /> : <SaveIcon />}
           <span className="action-label">{saving ? 'Saving…' : saveLabel}</span>
         </button>

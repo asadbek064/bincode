@@ -107,3 +107,14 @@ test('api limiter applies across /api', async () => {
   for (let i = 0; i < 3; i++) await request(t.app).get('/api/auth/me').expect(401);
   await request(t.app).get('/api/auth/me').expect(429);
 });
+
+test('failed logins for one email are limited across IPs; other emails are unaffected', async () => {
+  const t = makeApp({ limits: { login: 100, loginEmail: 3 }, env: { TRUST_PROXY: '1' } });
+  const login = (ip: string, email: string, password: string) =>
+    request(t.app).post('/api/auth/login').set('X-Forwarded-For', ip).send({ email, password });
+
+  for (let i = 1; i <= 3; i++) await login(`10.0.0.${i}`, 'alice@example.com', 'wrong-pass').expect(401);
+  // Case and whitespace don't get a fresh bucket.
+  await login('10.0.0.9', ' ALICE@example.com', PASSWORD).expect(429);
+  await login('10.0.0.9', 'bob@example.com', PASSWORD).expect(200);
+});

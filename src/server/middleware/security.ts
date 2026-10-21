@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { ipKeyGenerator, rateLimit, type Options } from 'express-rate-limit';
 import helmet from 'helmet';
 import { PREVIEW_PATH } from '../../shared/constants.ts';
 
@@ -46,15 +46,31 @@ export const vendorCorp: RequestHandler = (_req, res, next) => {
 export interface RateLimits {
   /** requests per minute across /api */
   api?: number;
-  /** failed login attempts per 15 minutes */
+  /** failed login attempts per 15 minutes, per IP */
   login?: number;
+  /** failed login attempts per 15 minutes, per email (across all IPs) */
+  loginEmail?: number;
+  /** failed collection unlocks per 15 minutes, per IP */
+  unlock?: number;
+  /** failed unlocks per hour, per collection (across all IPs) */
+  unlockCollection?: number;
+  /** mutations (POST/PUT/DELETE) per minute, per user */
+  writes?: number;
 }
 
-function limiter(windowMs: number, limit: number, skipSuccessfulRequests = false): RequestHandler {
+interface LimiterOptions {
+  windowMs: number;
+  limit: number;
+  skipSuccessfulRequests?: boolean;
+  keyGenerator?: Options['keyGenerator'];
+}
+
+function limiter({ windowMs, limit, skipSuccessfulRequests = false, keyGenerator }: LimiterOptions): RequestHandler {
   return rateLimit({
     windowMs,
     limit,
     skipSuccessfulRequests,
+    ...(keyGenerator ? { keyGenerator } : {}),
     standardHeaders: 'draft-8',
     legacyHeaders: false,
     handler: (_req, res) => {
@@ -63,9 +79,44 @@ function limiter(windowMs: number, limit: number, skipSuccessfulRequests = false
   });
 }
 
+// Prefixes keep keys from different sources apart. ipKeyGenerator groups IPv6 by /56 so one host can't
+// rotate addresses; it is called inline because express-rate-limit checks the keyGenerator's source for it.
+
+function bodyEmail(body: unknown): string | null {
+  const email = (body as { email?: unknown } | undefined)?.email;
+  return typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+}
+
 export function createRateLimiters(limits: RateLimits = {}) {
   return {
-    api: limiter(60_000, limits.api ?? 300),
-    login: limiter(15 * 60_000, limits.login ?? 10, true),
+    api: limiter({ windowMs: 60_000, limit: limits.api ?? 300 }),
+    login: limiter({ windowMs: 15 * 60_000, limit: limits.login ?? 10, skipSuccessfulRequests: true }),
+    // Stops a password guess spread across many IPs. Trade-off: an attacker can make one account's
+    // login fail for 15 minutes; the per-IP limit alone would let a botnet guess indefinitely.
+    loginEmail: limiter({
+      windowMs: 15 * 60_000,
+      limit: limits.loginEmail ?? 20,
+      skipSuccessfulRequests: true,
+      keyGenerator: (req) => {
+        const email = bodyEmail(req.body);
+        return email ? `email:${email}` : `ip:${ipKeyGenerator(req.ip ?? '')}`;
+      },
+    }),
+    unlock: limiter({ windowMs: 15 * 60_000, limit: limits.unlock ?? 10, skipSuccessfulRequests: true }),
+    // Same idea per collection. Visitors can be locked out for an hour; the owner never needs to unlock.
+    unlockCollection: limiter({
+      windowMs: 60 * 60_000,
+      limit: limits.unlockCollection ?? 50,
+      skipSuccessfulRequests: true,
+      keyGenerator: (req) => `collection:${String(req.params.shareId)}`,
+    }),
+    // Must run after requireAuth; keyed per account so one user can't flood the database.
+    writes: limiter({
+      windowMs: 60_000,
+      limit: limits.writes ?? 60,
+      keyGenerator: (req) => (req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip ?? '')}`),
+    }),
   };
 }
+
+export type RateLimiters = ReturnType<typeof createRateLimiters>;

@@ -1,3 +1,5 @@
+import type { Visibility } from '../../../shared/api.ts';
+import { VISIBILITIES } from '../../../shared/constants.ts';
 import { listKeys, readJson, removeItem, writeJson } from './storage.ts';
 
 export interface Draft {
@@ -5,6 +7,8 @@ export interface Draft {
   html: string;
   css: string;
   js: string;
+  /** absent in drafts written before private bins existed */
+  visibility?: Visibility;
   /** epoch ms */
   savedAt: number;
   /** server updatedAt of the snippet this draft was based on, null for new snippets */
@@ -25,6 +29,7 @@ function isDraft(value: unknown): value is Draft {
     typeof d.html === 'string' &&
     typeof d.css === 'string' &&
     typeof d.js === 'string' &&
+    (d.visibility === undefined || (VISIBILITIES as readonly unknown[]).includes(d.visibility)) &&
     typeof d.savedAt === 'number' &&
     (d.baseUpdatedAt === null || typeof d.baseUpdatedAt === 'string')
   );

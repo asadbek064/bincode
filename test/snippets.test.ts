@@ -24,7 +24,7 @@ test('create returns the full snippet without internal ids', async () => {
   assert.equal(s.forkedFrom, null);
   assert.equal(s.createdAt, s.updatedAt);
   assert.ok(!Number.isNaN(Date.parse(s.createdAt)));
-  assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'css', 'forkedFrom', 'html', 'isOwner', 'js', 'shareId', 'title', 'updatedAt']);
+  assert.deepEqual(Object.keys(s).sort(), ['collections', 'createdAt', 'css', 'forkedFrom', 'html', 'isOwner', 'js', 'shareId', 'title', 'updatedAt', 'visibility']);
 });
 
 test('empty or missing title becomes Untitled and code defaults to empty', async () => {
@@ -99,7 +99,7 @@ test('list shows only own snippets, newest updatedAt first, without code', async
   assert.deepEqual(res.body.snippets.map((s: { title: string }) => s.title), ['first!', 'second']);
   assert.equal(res.body.snippets[1].shareId, second.shareId);
   for (const s of res.body.snippets) {
-    assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'forkedFrom', 'shareId', 'title', 'updatedAt']);
+    assert.deepEqual(Object.keys(s).sort(), ['createdAt', 'forkedFrom', 'shareId', 'title', 'updatedAt', 'visibility']);
   }
 
   const empty = await request(t.app).get('/api/snippets').set(...auth(t.tokenFor(BOB))).expect(200);
@@ -157,4 +157,15 @@ test('deleting a user cascades to their snippets', async () => {
   const s = await createSnippet(t, BOB);
   t.users.delete(t.seeded.bob.id);
   await request(t.app).get(`/api/snippets/${s.shareId}`).expect(404);
+});
+
+test('mutations are limited per user', async () => {
+  const t = makeApp({ limits: { writes: 2 } });
+  const alice = auth(t.tokenFor('alice@example.com'));
+  await request(t.app).post('/api/snippets').set(...alice).send({ title: 'a' }).expect(201);
+  await request(t.app).post('/api/snippets').set(...alice).send({ title: 'b' }).expect(201);
+  await request(t.app).post('/api/snippets').set(...alice).send({ title: 'c' }).expect(429);
+  // Reads and other users are unaffected.
+  await request(t.app).get('/api/snippets').set(...alice).expect(200);
+  await request(t.app).post('/api/snippets').set(...auth(t.tokenFor('bob@example.com'))).send({ title: 'd' }).expect(201);
 });

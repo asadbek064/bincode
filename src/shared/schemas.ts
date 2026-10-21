@@ -1,6 +1,6 @@
 // Server-side validation schemas. The client only imports types/constants, so zod stays out of the bundle.
 import { z } from 'zod';
-import { DEFAULT_TITLE, LIMITS } from './constants.ts';
+import { DEFAULT_TITLE, LIMITS, VISIBILITIES } from './constants.ts';
 
 export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(LIMITS.emailMax));
 
@@ -19,6 +19,8 @@ const titleSchema = z
 
 const codeSchema = z.string().max(LIMITS.codeMax);
 
+export const visibilitySchema = z.enum(VISIBILITIES);
+
 function checkCodeSize(v: { html?: string; css?: string; js?: string }, ctx: z.RefinementCtx) {
   const size = (v.html?.length ?? 0) + (v.css?.length ?? 0) + (v.js?.length ?? 0);
   if (size > LIMITS.codeMax) {
@@ -32,6 +34,7 @@ export const snippetInputSchema = z
     html: codeSchema.default(''),
     css: codeSchema.default(''),
     js: codeSchema.default(''),
+    visibility: visibilitySchema.optional(),
   })
   .superRefine(checkCodeSize);
 
@@ -41,5 +44,16 @@ export const forkInputSchema = z
     html: codeSchema.optional(),
     css: codeSchema.optional(),
     js: codeSchema.optional(),
+    visibility: visibilitySchema.optional(),
   })
   .superRefine(checkCodeSize);
+
+export const collectionInputSchema = z.object({
+  title: titleSchema.default(DEFAULT_TITLE),
+  description: z.string().trim().max(LIMITS.descriptionMax).optional(),
+  password: z.string().min(LIMITS.collectionPasswordMin).max(LIMITS.passwordMax).nullable().optional(),
+});
+
+export const unlockSchema = z.object({
+  password: z.string().min(1).max(LIMITS.passwordMax),
+});

@@ -16,12 +16,47 @@ declare global {
 
 const BEARER = /^Bearer ([^\s]+)$/;
 
+/** Collection unlock tokens carry this audience; user tokens carry none, so neither passes as the other. */
+const COLLECTION_AUDIENCE = 'bincode:collection';
+const COLLECTION_TOKEN_TTL_SECONDS = 12 * 60 * 60;
+
 export function signToken(config: Config, userId: string): string {
   return jwt.sign({}, config.JWT_SECRET, {
     algorithm: 'HS256',
     subject: userId,
     expiresIn: config.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
   });
+}
+
+export function signCollectionToken(
+  config: Config,
+  collection: { id: string; passwordVersion: number },
+): { token: string; expiresAt: string } {
+  const token = jwt.sign({ pv: collection.passwordVersion }, config.JWT_SECRET, {
+    algorithm: 'HS256',
+    audience: COLLECTION_AUDIENCE,
+    subject: collection.id,
+    expiresIn: COLLECTION_TOKEN_TTL_SECONDS,
+  });
+  const expiresAt = new Date(Date.now() + COLLECTION_TOKEN_TTL_SECONDS * 1000).toISOString();
+  return { token, expiresAt };
+}
+
+export interface CollectionGrant {
+  collectionId: string;
+  passwordVersion: number;
+}
+
+/** Returns the grant in a valid collection token, or null for a missing, malformed or expired one. */
+export function verifyCollectionToken(config: Config, token: unknown): CollectionGrant | null {
+  if (typeof token !== 'string' || token.length === 0 || token.length > 2048) return null;
+  try {
+    const payload = jwt.verify(token, config.JWT_SECRET, { algorithms: ['HS256'], audience: COLLECTION_AUDIENCE });
+    if (typeof payload !== 'object' || typeof payload.sub !== 'string' || typeof payload.pv !== 'number') return null;
+    return { collectionId: payload.sub, passwordVersion: payload.pv };
+  } catch {
+    return null;
+  }
 }
 
 export function createAuth(config: Config, users: UsersRepo) {
@@ -35,7 +70,8 @@ export function createAuth(config: Config, users: UsersRepo) {
     try {
       // Pinning the algorithm blocks alg:none and key-confusion tokens.
       const payload = jwt.verify(match[1]!, config.JWT_SECRET, { algorithms: ['HS256'] });
-      if (typeof payload === 'object') userId = payload.sub;
+      // A token with an audience is a collection unlock token, not a login.
+      if (typeof payload === 'object' && payload.aud === undefined) userId = payload.sub;
     } catch {
       throw new HttpError(401, 'Invalid or expired token');
     }
