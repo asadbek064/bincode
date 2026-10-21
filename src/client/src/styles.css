@@ -1,41 +1,53 @@
 :root {
   color-scheme: light dark;
-  --primary: #63deab;
-  --primary-strong: #3fc88f;
-  --primary-soft: rgba(99, 222, 171, 0.16);
-  --on-primary: #05301e;
-  --focus: #2fb47c;
-  --border: #e1e4e8;
-  --text: #1f2328;
-  --text-muted: #6a737d;
+  /* Light-first slate + emerald palette; the dark block below mirrors it for OS dark mode. */
+  --primary: #059669;
+  --primary-strong: #047857;
+  --primary-soft: #ecfdf5;
+  --primary-border: #a7f3d0;
+  --accent: #10b981;
+  --on-primary: #ffffff;
+  --focus: #10b981;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
   --bg: #ffffff;
-  --surface: #f6f8fa;
-  --surface-hover: #eaeef2;
-  --danger: #cf222e;
-  --danger-soft: rgba(207, 34, 46, 0.1);
-  --warning-bg: #fff8c5;
-  --warning-border: #d4a72c;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  --surface: #f8fafc;
+  --surface-hover: #f1f5f9;
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --warning: #d97706;
+  --warning-bg: #fffbeb;
+  --warning-border: #fcd34d;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
   --radius: 6px;
-  --toolbar-h: 44px;
+  --toolbar-h: 56px;
+  --ease: 150ms ease;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --primary-soft: rgba(99, 222, 171, 0.14);
-    --focus: #63deab;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --bg: #1e1e1e;
-    --surface: #21262d;
-    --surface-hover: #2d333b;
-    --danger: #f85149;
-    --danger-soft: rgba(248, 81, 73, 0.15);
+    --primary: #10b981;
+    --primary-strong: #059669;
+    --primary-soft: rgba(16, 185, 129, 0.14);
+    --primary-border: rgba(16, 185, 129, 0.4);
+    --on-primary: #022c22;
+    --focus: #34d399;
+    --border: #1e293b;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --bg: #0f172a;
+    --surface: #111827;
+    --surface-hover: #1e293b;
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, 0.15);
+    --warning: #fbbf24;
     --warning-bg: #3b2e00;
     --warning-border: #9e6a03;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   }
 }
@@ -110,7 +122,7 @@ button {
   color: var(--text);
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--ease), border-color var(--ease), color var(--ease), box-shadow var(--ease);
 }
 
 button:hover:not(:disabled) {
@@ -1050,4 +1062,30 @@ select:focus-visible {
   .snippet-actions {
     margin-left: auto;
   }
+}
+
+/* Popover (shared by Share, account menu, editor settings) */
+.popover-anchor {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 50;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.popover-start {
+  left: 0;
+}
+
+.popover-end {
+  right: 0;
 }

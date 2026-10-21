@@ -42,3 +42,5 @@ export const ERUDA_PATH = '/vendor/eruda.min.js';
 /** postMessage protocol between the app and the sandboxed preview frame */
 export const PREVIEW_READY = 'bincode:ready';
 export const PREVIEW_RENDER = 'bincode:render';
+/** frame → parent: one console call or uncaught error from the snippet */
+export const PREVIEW_CONSOLE = 'bincode:console';
