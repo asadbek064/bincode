@@ -5,3 +5,5 @@ playground.db
 .env
 
 bincode.db
+
+public/libraries/monaco/

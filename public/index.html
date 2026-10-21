@@ -11,8 +11,6 @@
 
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="./font.css">
-    <!-- Prismjs css -->
-    <link rel="stylesheet" href="./libraries/prism/theme/prism.min.css" />
 
   </head>
   <body>
@@ -80,20 +78,8 @@
 
           <!-- Editor content -->
           <div class="editor-content">
-            <textarea
-            :value="currentCode"
-            @input="handleInput"
-            @scroll="handleScroll"
-            @keydown="handleKeydown"
-            :class="{ 'active-editor': true }"
-            spellcheck="false"
-            autocomplete="off"
-            :placeholder="'Enter your ' + activeTab.toUpperCase() + ' code here...'"
-          ></textarea>
-            <pre
-              class="editor-highlight"
-              aria-hidden="true"
-            ><code v-html="highlightedCode[activeTab]"></code></pre>
+            <div v-if="!monacoLoaded" class="editor-loading">Loading editor...</div>
+            <div id="monaco-container" v-show="monacoLoaded"></div>
           </div>
         </div>
 
@@ -157,11 +143,8 @@
     <!-- use`_dev` or `_prod` lib for vuejs based on env -->
     <script src="./libraries/vue/vuejs_3.5.13_prod.js"></script>
 
-    <!-- Prismjs -->
-    <script src="./libraries/prism/prism.min.js"></script>
-    <script src="./libraries/prism/prism-markup.min.js"></script>
-    <script src="./libraries/prism/prism-css.min.js"></script>
-    <script src="./libraries/prism/prism-javascript.min.js"></script>
+    <!-- Monaco Editor -->
+    <script src="./libraries/monaco/vs/loader.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

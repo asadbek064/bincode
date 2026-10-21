@@ -1,7 +1,5 @@
 const { createApp } = Vue;
 
-Prism.manual = true;
-
 createApp({
   data() {
     return {
@@ -16,11 +14,11 @@ createApp({
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width">
-    <title>Bin Code</title>
+    <title>Title</title>
   </head>
-<body>
+  <body>
 
-</body>
+  </body>
 </html>
       `,
       css: "",
@@ -76,39 +74,20 @@ createApp({
 `,
         },
       ],
-      highlightedCode: {
-        html: "",
-        css: "",
-        js: "",
-      },
+      monacoLoaded: false,
+      monacoEditor: null,
+      monacoModels: null,
       showEditor: true,
       showPreview: true,
       isExecutionPaused: false,
       updateTimer: null,
-      showConsole: true,
+      showConsole: false,
       playIcon: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M320-200v-560l440 280-440 280Zm80-280Zm0 134 210-134-210-134v268Z"/></svg>`,
       pauseIcon: `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="currentColor" d="M520-200v-560h240v560H520Zm-320 0v-560h240v560H200Zm400-80h80v-400h-80v400Zm-320 0h80v-400h-80v400Zm320-400Zm-320 0Z"/></svg>`,
     };
   },
 
   computed: {
-    displayCode() {
-      return {
-        html: this.highlightedCode.html || this.html,
-        css: this.highlightedCode.css || this.css,
-        js: this.highlightedCode.js || this.js,
-      };
-    },
-    currentCode: {
-      get() {
-        return this[this.activeTab];
-      },
-      set(value) {
-        this[this.activeTab] = value;
-        this.highlightCode(value, this.activeTab);
-      },
-    },
-
     previewWidth() {
       if (
         typeof this.editorWidth === "string" &&
@@ -116,13 +95,9 @@ createApp({
       ) {
         return 100 - parseInt(this.editorWidth) + "%";
       }
-      return `calc(100% - ${this.editorWidth}px)`;
+      return `calc(100% - ${this.editorWidth})`;
     },
 
-    currentLanguage() {
-      const tab = this.tabs.find((t) => t.id === this.activeTab);
-      return tab ? tab.language : "markup";
-    },
   },
 
   watch: {
@@ -153,108 +128,116 @@ createApp({
   },
 
   mounted() {
-    const textarea = document.querySelector('.editor-content textarea');
-    if (textarea) {
-      textarea.addEventListener('paste', this.handlePaste);
-    }
-
-    this.loadPrismTheme();
-    this.initThemeListener();
-
     this.initializeLayout();
     document.addEventListener("keydown", this.handleKeyboardShortcuts);
+    this.initMonaco();
 
-    // initialize syntax highlighting
-    this.highlightCode(this.html, "html");
-    this.highlightCode(this.css, "css");
-    this.highlightCode(this.js, "js");
-
-    // ensure iframe isloaded before updating the preview
+    // ensure iframe is loaded before updating the preview
     const preview = document.getElementById("preview-frame");
     if (preview) {
       preview.onload = () => {
         this.updatePreview();
       };
     }
+
+    // relayout Monaco on window resize
+    window.addEventListener('resize', this._onWindowResize = () => {
+      if (this.monacoEditor) this.monacoEditor.layout();
+    });
   },
   beforeUnmount() {
-    const textarea = document.querySelector('.editor-content textarea');
-    if (textarea) {
-      textarea.removeEventListener('paste', this.handlePaste);
+    if (this.monacoEditor) this.monacoEditor.dispose();
+    if (this.monacoModels) {
+      Object.values(this.monacoModels).forEach(m => m.dispose());
     }
+    document.removeEventListener("keydown", this.handleKeyboardShortcuts);
+    window.removeEventListener('resize', this._onWindowResize);
   },
 
   methods: {
-    handlePaste(event) {
-      const textarea = event.target;
-      
-      // scroll to cursor
-      requestAnimationFrame(() => {
-        this.scrollToCursor(textarea);
+    initMonaco() {
+      const baseUrl = window.location.origin + '/libraries/monaco/vs';
+
+      require.config({ paths: { vs: baseUrl } });
+
+      // Configure workers to load through AMD loader
+      window.MonacoEnvironment = {
+        getWorkerUrl: function () {
+          return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+            self.MonacoEnvironment = { baseUrl: '${baseUrl}/../' };
+            importScripts('${baseUrl}/base/worker/workerMain.js');
+          `)}`;
+        }
+      };
+
+      require(['vs/editor/editor.main'], () => {
+        this.monacoLoaded = true;
+
+        // Wait for Vue to make the container visible before creating editor
+        this.$nextTick(() => {
+          this.createMonacoEditor();
+        });
+      }, (err) => {
+        console.error('Monaco failed to load:', err);
       });
     },
-    scrollToCursor(textarea) {
-      const cursorPosition = textarea.selectionStart;
-  
-      const lineHeight = parseInt(getComputedStyle(textarea).lineHeight, 10);
-      const lines = textarea.value.substr(0, cursorPosition).split('\n').length;
-  
-      const scrollTop = (lines - 1) * lineHeight;
-  
-      textarea.scrollTop = scrollTop;
-  
-      const pre = textarea.nextElementSibling;
-      if (pre) {
-        pre.scrollTop = scrollTop;
-      }
-    },
-    loadPrismTheme() {
-      const existingTheme = document.querySelector("link[data-prism-theme]");
-      if (existingTheme) {
-        existingTheme.remove();
-      }
 
-      const isDarkMode = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
+    createMonacoEditor() {
+      // Create one model per tab to preserve undo history
+      this.monacoModels = {
+        html: monaco.editor.createModel(this.html, 'html'),
+        css: monaco.editor.createModel(this.css, 'css'),
+        js: monaco.editor.createModel(this.js, 'javascript'),
+      };
 
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.setAttribute("data-prism-theme", "");
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-      if (isDarkMode) {
-        link.href = "./libraries/prism/theme/prism-vsc-dark-plus.min.css";
-      } else {
-        link.href = "./libraries/prism/theme/prism.min.css";
-      }
+      this.monacoEditor = monaco.editor.create(
+        document.getElementById('monaco-container'),
+        {
+          model: this.monacoModels[this.activeTab],
+          theme: isDark ? 'vs-dark' : 'vs',
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontSize: 14,
+          lineHeight: 20,
+          scrollBeyondLastLine: false,
+          tabSize: 2,
+          insertSpaces: true,
+          wordWrap: 'off',
+          renderWhitespace: 'none',
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          scrollbar: {
+            verticalScrollbarSize: 6,
+            horizontalScrollbarSize: 6,
+          },
+          padding: { top: 8 },
+        }
+      );
 
-      document.head.appendChild(link);
-      this.rehighlightCode();
-    },
-
-    rehighlightCode() {
-      this.highlightCode(this.html, "html");
-      this.highlightCode(this.css, "css");
-      this.highlightCode(this.js, "js");
-    },
-    initThemeListener() {
-      window
-        .matchMedia("(prefers-color-scheme: dark)")
-        .addEventListener("change", () => {
-          this.loadPrismTheme();
+      // Sync model content changes back to Vue data
+      Object.keys(this.monacoModels).forEach((tab) => {
+        this.monacoModels[tab].onDidChangeContent(() => {
+          this[tab] = this.monacoModels[tab].getValue();
         });
+      });
+
+      // System theme listener
+      window.matchMedia('(prefers-color-scheme: dark)')
+        .addEventListener('change', (e) => {
+          monaco.editor.setTheme(e.matches ? 'vs-dark' : 'vs');
+        });
+
+      // Ctrl+S save inside Monaco
+      this.monacoEditor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+        () => { this.saveSnippet(); }
+      );
+
+      this.updatePreview();
     },
-    handleScroll(event) {
-      const textarea = event.target;
-      const pre = textarea.nextElementSibling;
-      if (pre) {
-        pre.style.width = `${textarea.offsetWidth}px`;
-        pre.style.height = `${textarea.offsetHeight}px`;
-        
-        pre.scrollTop = textarea.scrollTop;
-        pre.scrollLeft = textarea.scrollLeft;
-      }
-    },
+
     toggleConsole() {
       this.showConsole = !this.showConsole;
       this.updatePreview();
@@ -281,6 +264,9 @@ createApp({
 
     toggleEditor() {
       this.showEditor = !this.showEditor;
+      this.$nextTick(() => {
+        if (this.monacoEditor) this.monacoEditor.layout();
+      });
     },
     togglePreview() {
       this.showPreview = !this.showPreview;
@@ -289,63 +275,10 @@ createApp({
       } else {
         this.editorWidth = "50%";
       }
-    },
-    highlightCode(code, tab) {
-      const languageMap = {
-        html: "markup",
-        css: "css",
-        js: "javascript",
-      };
-
-      const language = languageMap[tab];
-      if (!language) return;
-
-      // run highlighting in a requestAnimationFrame to avoid blocking the main thread
-      requestAnimationFrame(() => {
-        try {
-          this.highlightedCode[tab] = Prism.highlight(
-            code || "",
-            Prism.languages[language],
-            language
-          );
-        } catch (error) {
-          console.error("Highlighting error:", error);
-          this.highlightedCode[tab] = code || "";
-        }
+      this.$nextTick(() => {
+        if (this.monacoEditor) this.monacoEditor.layout();
       });
     },
-    handleKeydown(event) {
-      if (event.key === "Tab") {
-        event.preventDefault();
-
-        const textarea = event.target;
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const spaces = "  ";
-
-        const value = this.currentCode;
-        const beforeCursor = value.substring(0, start);
-        const afterCursor = value.substring(end);
-
-        if (event.shiftKey) {
-          // TODO: Shift + Tab undo 2 space
-        } else {
-          // Handle Tab (indent)
-          this.currentCode = beforeCursor + spaces + afterCursor;
-
-          this.$nextTick(() => {
-            textarea.selectionStart = textarea.selectionEnd =
-              start + spaces.length;
-          });
-        }
-      }
-    },
-    handleInput(event) {
-      const value = event.target.value;
-      this[this.activeTab] = value;
-      this.highlightCode(value, this.activeTab);
-    },
-
     debounce(fn, delay) {
       let timeoutId;
       return function (...args) {
@@ -359,12 +292,12 @@ createApp({
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         const num = parseInt(e.key);
         if (num >= 1 && num <= this.tabs.length) {
-          this.activeTab = this.tabs[num - 1].id;
           e.preventDefault();
+          this.switchTab(this.tabs[num - 1].id);
         }
       }
 
-      // handle Ctrl/Cmd + S for save
+      // handle Ctrl/Cmd + S for save (for when focus is outside Monaco)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         this.saveSnippet();
@@ -399,6 +332,11 @@ createApp({
       const editorGroup = document.querySelector(".editor-group");
       this.startWidth = editorGroup.offsetWidth;
 
+      // Recalculate container bounds each drag start
+      const container = document.querySelector(".editor-container");
+      this.containerWidth = container.offsetWidth;
+      this.maxWidth = this.containerWidth - this.minWidth;
+
       this.toggleIframe("none")
 
       document.body.classList.add('resizing');
@@ -426,9 +364,13 @@ createApp({
     },
 
     processMove(clientX) {
-      const deltaX = clientX - this.startX;
-      this.editorWidth = `${this.startWidth + deltaX}px`;
-      this.updateLayout();
+      if (this._rafId) return;
+      this._rafId = requestAnimationFrame(() => {
+        this._rafId = null;
+        const deltaX = clientX - this.startX;
+        const newWidth = Math.max(this.minWidth, Math.min(this.startWidth + deltaX, this.maxWidth));
+        this.editorWidth = `${newWidth}px`;
+      });
     },
 
     onMouseUp() {
@@ -443,9 +385,18 @@ createApp({
       if (!this.isDragging) return;
 
       this.isDragging = false;
+      if (this._rafId) {
+        cancelAnimationFrame(this._rafId);
+        this._rafId = null;
+      }
       document.body.classList.remove('resizing');
 
       this.toggleIframe("auto")
+
+      // Trigger Monaco relayout after resize
+      if (this.monacoEditor) {
+        this.monacoEditor.layout();
+      }
 
       // Remove both mouse and touch event listeners
       document.removeEventListener('mousemove', this.onMouseMove);
@@ -513,12 +464,10 @@ createApp({
 
     switchTab(tabId) {
       this.activeTab = tabId;
-      // re-highlight code when switching tabs
-      this.$nextTick(() => {
-        this.highlightCode(this[tabId], tabId);
-        const editor = document.querySelector(".editor-content textarea");
-        if (editor) editor.focus();
-      });
+      if (this.monacoEditor && this.monacoModels) {
+        this.monacoEditor.setModel(this.monacoModels[tabId]);
+        this.monacoEditor.focus();
+      }
     },
 
     async login() {
@@ -591,7 +540,12 @@ createApp({
         this.css = data.css;
         this.js = data.js;
 
-        this.rehighlightCode();
+        // Update Monaco models if loaded
+        if (this.monacoModels) {
+          this.monacoModels.html.setValue(this.html);
+          this.monacoModels.css.setValue(this.css);
+          this.monacoModels.js.setValue(this.js);
+        }
 
         this.updatePreview();
       } catch (error) {
