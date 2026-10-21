@@ -35,6 +35,8 @@ const ERUDA_INIT = [
   '  eruda.init({',
   '    useShadowDom: true,',
   '    autoScale: true,',
+  // The default Info tool embeds an image from opencollective.com; omit it so the preview stays offline.
+  "    tool: ['console', 'elements', 'network', 'resources', 'sources', 'snippets'],",
   "    defaults: { displaySize: 50, transparency: 0.9, theme: 'Monokai Pro' }",
   '  });',
   '  eruda.show();',
