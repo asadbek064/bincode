@@ -70,8 +70,16 @@ interface EditorPaneProps {
 /** Tabs that offer the CDNJS "+" button (libraries are always added to the HTML panel). */
 const LIBRARY_TABS: readonly CodeField[] = ['html', 'js'];
 
-export default function EditorPane(props: EditorPaneProps) {
-  const { activeTab, onTabChange, values, onChange, onSave, onRun, onInsertLibrary, dark } = props;
+export default function EditorPane({
+  activeTab,
+  onTabChange,
+  values,
+  onChange,
+  onSave,
+  onRun,
+  onInsertLibrary,
+  dark,
+}: EditorPaneProps) {
   // Monaco commands are registered once at mount; refs keep them calling the latest handlers.
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
@@ -99,11 +107,9 @@ export default function EditorPane(props: EditorPaneProps) {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
-  // Which tab's "+" opened the library search; its button is the popover's anchor for outside clicks.
+  // Which tab's "+" opened the library search. That button is exempt from the popover's outside-click close.
   const [libraryFrom, setLibraryFrom] = useState<CodeField | null>(null);
-  const libraryButtons = useRef<Partial<Record<CodeField, HTMLButtonElement | null>>>({});
-  const libraryAnchor = useRef<HTMLButtonElement | null>(null);
-  libraryAnchor.current = libraryFrom ? (libraryButtons.current[libraryFrom] ?? null) : null;
+  const libraryButton = useRef<HTMLButtonElement | null>(null);
 
   // The <Editor> only syncs `value` into the visible model. Models for the other
   // tabs keep stale text after a load/reset, so push changes into them directly.
@@ -183,16 +189,16 @@ export default function EditorPane(props: EditorPaneProps) {
               </button>
               {LIBRARY_TABS.includes(t.id) && (
                 <button
-                  ref={(el) => {
-                    libraryButtons.current[t.id] = el;
-                  }}
                   type="button"
-                  className={libraryFrom === t.id ? 'tab-add open' : 'tab-add'}
+                  className={libraryFrom === t.id ? 'icon-button tab-add open' : 'icon-button tab-add'}
                   aria-label="Add library from CDNJS"
                   title="Add library from CDNJS"
                   aria-haspopup="dialog"
                   aria-expanded={libraryFrom === t.id}
-                  onClick={() => setLibraryFrom((from) => (from === t.id ? null : t.id))}
+                  onClick={(e) => {
+                    libraryButton.current = e.currentTarget;
+                    setLibraryFrom((from) => (from === t.id ? null : t.id));
+                  }}
                 >
                   <PlusIcon />
                 </button>
@@ -203,7 +209,7 @@ export default function EditorPane(props: EditorPaneProps) {
         <Popover
           open={libraryFrom !== null}
           onClose={() => setLibraryFrom(null)}
-          anchorRef={libraryAnchor}
+          anchorRef={libraryButton}
           align="start"
           label="Add library from CDNJS"
           className="lib-popover"

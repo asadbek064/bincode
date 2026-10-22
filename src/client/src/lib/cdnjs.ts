@@ -1,10 +1,10 @@
 // CDNJS library search (https://api.cdnjs.com, free, no auth) and the tags we insert for a result.
-// No DOM imports: the server tsconfig compiles this file so the helpers can be unit-tested.
+// No DOM imports: it is imported by a server-side test (test/cdnjs.test.ts), so it must stay DOM-free.
 
-export const CDNJS_API = 'https://api.cdnjs.com/libraries';
+const CDNJS_API = 'https://api.cdnjs.com/libraries';
 const CDN_ORIGIN = 'https://cdnjs.cloudflare.com/';
 const DESCRIPTION_MAX = 200;
-export const SEARCH_LIMIT = 15;
+const SEARCH_LIMIT = 15;
 
 export interface CdnLibrary {
   name: string;
@@ -19,7 +19,7 @@ export interface CdnLibrary {
 export function searchUrl(query: string): string {
   const params = new URLSearchParams({
     search: query,
-    fields: 'version,description,filename,sri',
+    fields: 'version,description,sri',
     limit: String(SEARCH_LIMIT),
   });
   return `${CDNJS_API}?${params}`;
@@ -55,11 +55,16 @@ export function parseResults(body: unknown): CdnLibrary[] {
 }
 
 const cache = new Map<string, CdnLibrary[]>();
+const cacheKey = (query: string) => query.toLowerCase();
 
-/** Searches CDNJS; results are cached per query for the session. Empty queries return nothing. */
+/** Results of an earlier identical search, if any, so the UI can show them without a loading state. */
+export function cachedLibraries(query: string): CdnLibrary[] | undefined {
+  return cache.get(cacheKey(query));
+}
+
+/** Searches CDNJS (callers pass a trimmed, non-empty query); results are cached per query for the session. */
 export async function searchLibraries(query: string, signal?: AbortSignal): Promise<CdnLibrary[]> {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
+  const q = cacheKey(query);
   const hit = cache.get(q);
   if (hit) return hit;
   const res = await fetch(searchUrl(q), { signal, headers: { Accept: 'application/json' } });
@@ -82,8 +87,8 @@ export function tagFor(lib: Pick<CdnLibrary, 'url' | 'sri'>): string {
   return isCss ? `<link rel="stylesheet" href="${url}"${common}>` : `<script src="${url}"${common}></script>`;
 }
 
-/** Prepends the tag to the HTML panel unless that URL is already referenced there. */
-export function insertTag(html: string, tag: string, url: string): { html: string; added: boolean } {
-  if (html.includes(url) || html.includes(escapeAttr(url))) return { html, added: false };
-  return { html: `${tag}\n${html}`, added: true };
+/** Prepends the library's tag to the HTML panel unless its URL is already referenced there. */
+export function insertTag(html: string, lib: Pick<CdnLibrary, 'url' | 'sri'>): { html: string; added: boolean } {
+  if (html.includes(lib.url) || html.includes(escapeAttr(lib.url))) return { html, added: false };
+  return { html: `${tagFor(lib)}\n${html}`, added: true };
 }

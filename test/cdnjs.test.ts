@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SEARCH_LIMIT, insertTag, parseResults, searchUrl, tagFor } from '../src/client/src/lib/cdnjs.ts';
+import { insertTag, parseResults, searchUrl, tagFor } from '../src/client/src/lib/cdnjs.ts';
 
 const SRI = 'sha512-abc+/def==';
 
@@ -8,8 +8,8 @@ test('searchUrl asks CDNJS for the fields we show', () => {
   const url = new URL(searchUrl('xlsx'));
   assert.equal(url.origin + url.pathname, 'https://api.cdnjs.com/libraries');
   assert.equal(url.searchParams.get('search'), 'xlsx');
-  assert.equal(url.searchParams.get('fields'), 'version,description,filename,sri');
-  assert.equal(url.searchParams.get('limit'), String(SEARCH_LIMIT));
+  assert.equal(url.searchParams.get('fields'), 'version,description,sri');
+  assert.equal(url.searchParams.get('limit'), '15');
 });
 
 test('parseResults maps the API response and drops anything unsafe or malformed', () => {
@@ -55,13 +55,13 @@ test('tagFor builds a pinned script for JS and a stylesheet link for CSS', () =>
 });
 
 test('insertTag prepends once and never duplicates a library', () => {
-  const url = 'https://cdnjs.cloudflare.com/ajax/libs/x/1/x.js';
-  const tag = tagFor({ url, sri: null });
-  const first = insertTag('<p>hi</p>', tag, url);
+  const lib = { url: 'https://cdnjs.cloudflare.com/ajax/libs/x/1/x.js', sri: null };
+  const tag = tagFor(lib);
+  const first = insertTag('<p>hi</p>', lib);
   assert.equal(first.added, true);
   assert.equal(first.html, `${tag}\n<p>hi</p>`);
-  const again = insertTag(first.html, tag, url);
+  const again = insertTag(first.html, lib);
   assert.equal(again.added, false);
   assert.equal(again.html, first.html);
-  assert.deepEqual(insertTag('', tag, url), { html: `${tag}\n`, added: true });
+  assert.deepEqual(insertTag('', lib), { html: `${tag}\n`, added: true });
 });

@@ -10,36 +10,6 @@
   gap: 0.4rem;
 }
 
-/* type="search" isn't covered by the global input rule in styles.css. */
-.lib-search .lib-search-input {
-  width: 100%;
-  padding: 0.5rem 0.7rem;
-  border: 1.5px solid var(--primary);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.95rem;
-  box-shadow: 0 0 0 3px var(--primary-soft);
-  outline: none;
-}
-
-.lib-search-hint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
-.lib-search-status {
-  padding: 0.4rem 0.2rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.lib-search-status.error {
-  color: var(--danger);
-}
-
 .lib-search-results {
   list-style: none;
   max-height: 320px;
@@ -86,16 +56,7 @@
 
 .lib-option-version {
   flex-shrink: 0;
-  padding: 0 0.35rem;
-  border-radius: 4px;
-  background: var(--surface-hover);
   font-family: var(--mono);
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.lib-option.active .lib-option-version {
-  background: var(--bg);
 }
 
 .lib-option-desc {

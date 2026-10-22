@@ -22,7 +22,7 @@ import { CODE_FIELDS, toCurrent, useSnippetEditor } from './hooks/useSnippetEdit
 import type { CodeField } from './hooks/useSnippetEditor.ts';
 import * as api from './lib/api.ts';
 import { ApiError } from './lib/api.ts';
-import { insertTag, tagFor, type CdnLibrary } from './lib/cdnjs.ts';
+import { insertTag, type CdnLibrary } from './lib/cdnjs.ts';
 import { copyText } from './lib/clipboard.ts';
 import { DEFAULT_PENDING, pendingToInput, type PendingSettings } from './lib/binSettings.ts';
 import { forgetUnlockToken, getUnlockToken, saveUnlockToken } from './lib/unlockTokens.ts';
@@ -377,14 +377,13 @@ export function App() {
   // CDNJS libraries always go into the HTML panel, at the top, so they load before the user's code.
   const onInsertLibrary = useCallback(
     (lib: CdnLibrary) => {
-      const label = lib.version ? `${lib.name} ${lib.version}` : lib.name;
-      const result = insertTag(stateRef.current.html, tagFor(lib), lib.url);
+      const result = insertTag(stateRef.current.html, lib);
       if (!result.added) {
         notify('success', `${lib.name} is already in the HTML`);
         return;
       }
       dispatch({ type: 'edit', field: 'html', value: result.html });
-      notify('success', `Added ${label} to HTML`);
+      notify('success', `Added ${lib.version ? `${lib.name} ${lib.version}` : lib.name} to HTML`);
     },
     [dispatch, notify],
   );

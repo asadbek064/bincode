@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts';
-import { searchLibraries, type CdnLibrary } from '../lib/cdnjs.ts';
+import { cachedLibraries, searchLibraries, type CdnLibrary } from '../lib/cdnjs.ts';
 import './LibrarySearch.css';
 
 const DEBOUNCE_MS = 250;
@@ -22,11 +22,17 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
   const debounced = useDebouncedValue(query.trim(), DEBOUNCE_MS);
   const [state, setState] = useState<SearchState>({ status: 'idle' });
   const [active, setActive] = useState(0);
-  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!debounced) {
       setState({ status: 'idle' });
+      return;
+    }
+    // A repeated query shows its results at once: no "Searching…" flash, no list remount.
+    const cached = cachedLibraries(debounced);
+    if (cached) {
+      setState({ status: 'ready', results: cached });
+      setActive(0);
       return;
     }
     // A newer query cancels the one in flight, so results never arrive out of order.
@@ -45,18 +51,20 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
 
   const results = state.status === 'ready' ? state.results : [];
 
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [active]);
+  // Only keyboard moves scroll the list; a hovered row is already in view.
+  const moveTo = (next: number) => {
+    setActive(next);
+    document.getElementById(`lib-option-${next}`)?.scrollIntoView({ block: 'nearest' });
+  };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (!results.length) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((i) => (i + 1) % results.length);
+      moveTo((active + 1) % results.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((i) => (i - 1 + results.length) % results.length);
+      moveTo((active - 1 + results.length) % results.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const lib = results[active];
@@ -68,31 +76,32 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
     <div className="lib-search">
       <input
         type="search"
-        className="lib-search-input"
         placeholder="Search CDNJS…"
         aria-label="Search CDNJS libraries"
         aria-controls="lib-search-results"
         aria-activedescendant={results.length ? `lib-option-${active}` : undefined}
         value={query}
         maxLength={100}
-        autoFocus
         spellCheck={false}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}
       />
-      <p className="lib-search-hint">
+      <p className="form-hint">
         Type a library name to fetch from CDNJS URL - add directly into the HTML panel as a SCRIPT or LINK
       </p>
-      {state.status === 'loading' && <p className="lib-search-status">Searching…</p>}
-      {state.status === 'error' && <p className="lib-search-status error">Could not reach CDNJS.</p>}
-      {state.status === 'ready' && results.length === 0 && <p className="lib-search-status">No libraries found.</p>}
+      {state.status === 'loading' && <p className="muted">Searching…</p>}
+      {state.status === 'error' && (
+        <p className="form-error" role="alert">
+          Could not reach CDNJS.
+        </p>
+      )}
+      {state.status === 'ready' && results.length === 0 && <p className="muted">No libraries found.</p>}
       {results.length > 0 && (
-        <ul ref={listRef} id="lib-search-results" className="lib-search-results" role="listbox" aria-label="Libraries">
+        <ul id="lib-search-results" className="lib-search-results" role="listbox" aria-label="Libraries">
           {results.map((lib, i) => (
             <li
               key={lib.name}
               id={`lib-option-${i}`}
-              data-index={i}
               role="option"
               aria-selected={i === active}
               className={i === active ? 'lib-option active' : 'lib-option'}
@@ -106,7 +115,7 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
             >
               <span className="lib-option-head">
                 <span className="lib-option-name">{lib.name}</span>
-                {lib.version && <span className="lib-option-version">{lib.version}</span>}
+                {lib.version && <span className="badge lib-option-version">{lib.version}</span>}
               </span>
               {lib.description && <span className="lib-option-desc">{lib.description}</span>}
             </li>

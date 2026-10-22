@@ -43,7 +43,8 @@
 
 .editor-header .tab.active,
 .editor-header .tab.active:hover {
-  background: var(--bg);
+  /* The surrounding .tab-group paints the active background, so it also covers the "+". */
+  background: transparent;
   color: var(--text);
   border: none;
 }
@@ -97,7 +98,7 @@
   padding: 0;
 }
 
-.editor-actions .icon-button.open {
+.editor-header .icon-button.open {
   background: var(--surface-hover);
   color: var(--text);
 }
@@ -168,7 +169,7 @@
   transform: translateX(14px);
 }
 
-/* A tab plus its optional CDNJS "+" button share one background and indicator area. */
+/* A tab plus its optional CDNJS "+" button share one background; the indicator stays under the tab. */
 .editor-header .tab-group {
   display: flex;
   align-items: stretch;
@@ -180,10 +181,7 @@
   background: var(--bg);
 }
 
-.editor-header .tab-group.active .tab {
-  background: transparent;
-}
-
+/* .icon-button supplies the look; only the size and spacing are specific to the tab. */
 .editor-header .tab-add {
   align-self: center;
   min-height: 0;
@@ -191,20 +189,10 @@
   height: 20px;
   margin: 0 0.4rem 0 -0.45rem;
   padding: 0;
-  border: 1px solid transparent;
   border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
 }
 
 .editor-header .tab-add svg {
   width: 14px;
   height: 14px;
-}
-
-.editor-header .tab-add:hover:not(:disabled),
-.editor-header .tab-add.open {
-  border-color: var(--primary-border);
-  background: var(--primary-soft);
-  color: var(--primary-strong);
 }
