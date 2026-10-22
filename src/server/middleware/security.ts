@@ -12,7 +12,8 @@ const APP_CSP = {
   fontSrc: ["'self'", 'data:'],
   // Monaco language workers may be spawned from blob: URLs.
   workerSrc: ["'self'", 'blob:'],
-  connectSrc: ["'self'"],
+  // The editor's library search calls the public CDNJS API straight from the browser.
+  connectSrc: ["'self'", 'https://api.cdnjs.com'],
   frameSrc: ["'self'"],
   objectSrc: ["'none'"],
   baseUri: ["'self'"],

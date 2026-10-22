@@ -21,7 +21,7 @@ export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLo
   const menuRef = useRef<HTMLDivElement>(null);
 
   const items = [
-    { label: 'My snippets', icon: <ListIcon />, run: onOpenSnippets },
+    { label: 'My bins', icon: <ListIcon />, run: onOpenSnippets },
     { label: 'New bin', icon: <PlusIcon />, run: onNew },
     ...(canFork ? [{ label: 'Fork', icon: <ForkIcon />, run: onFork }] : []),
     { label: 'Sign out', icon: <LogoutIcon />, run: onLogout },

@@ -6,6 +6,7 @@ A self-hostable JSFiddle alternative: write HTML/CSS/JS, see a live preview, sha
 
 ## Features
 - Monaco editor with HTML / CSS / JS tabs, sandboxed live preview and a console
+- Add libraries from CDNJS: search from the HTML or JavaScript tab, and a pinned `<script>` / `<link>` is added to the HTML
 - Share by link; each bin is **Link**, **Password** or **Only me**
 - Self-destruct after the first view, or after 10 minutes to a month
 - Collections to group bins, optionally shared by link + password
@@ -41,6 +42,7 @@ For production, run `pnpm build && pnpm start` behind a reverse proxy for HTTPS,
 - Previews run in a sandboxed, opaque-origin iframe, so snippet code can't reach the app's storage or login token.
 - A bin's own visibility decides who can read it. Password and burn-after-read bins send no content until explicitly unlocked.
 - Strict CSP, rate limits on the API, login and unlocks, and per-account quotas.
+- The only outside call is the optional library search, made from your browser to the public CDNJS API (`api.cdnjs.com`); inserted tags carry SRI hashes when CDNJS provides them.
 
 ## Contributing
 Keep it lightweight and self-contained. The API contract lives in `src/shared/api.ts`. Run `pnpm typecheck && pnpm test` before opening a PR.

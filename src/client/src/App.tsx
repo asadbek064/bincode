@@ -22,6 +22,7 @@ import { CODE_FIELDS, toCurrent, useSnippetEditor } from './hooks/useSnippetEdit
 import type { CodeField } from './hooks/useSnippetEditor.ts';
 import * as api from './lib/api.ts';
 import { ApiError } from './lib/api.ts';
+import { insertTag, tagFor, type CdnLibrary } from './lib/cdnjs.ts';
 import { copyText } from './lib/clipboard.ts';
 import { DEFAULT_PENDING, pendingToInput, type PendingSettings } from './lib/binSettings.ts';
 import { forgetUnlockToken, getUnlockToken, saveUnlockToken } from './lib/unlockTokens.ts';
@@ -340,7 +341,7 @@ export function App() {
     [dispatch, drafts, notify],
   );
 
-  // Settings changed elsewhere (the panel or My snippets): refresh the open bin's metadata.
+  // Settings changed elsewhere (the panel or My bins): refresh the open bin's metadata.
   const onSettingsApplied = useCallback(
     (snippet: Snippet) => {
       if (stateRef.current.current?.shareId === snippet.shareId) dispatch({ type: 'meta', current: toCurrent(snippet) });
@@ -371,6 +372,21 @@ export function App() {
   const onEdit = useCallback(
     (field: CodeField | 'title', value: string) => dispatch({ type: 'edit', field, value }),
     [dispatch],
+  );
+
+  // CDNJS libraries always go into the HTML panel, at the top, so they load before the user's code.
+  const onInsertLibrary = useCallback(
+    (lib: CdnLibrary) => {
+      const label = lib.version ? `${lib.name} ${lib.version}` : lib.name;
+      const result = insertTag(stateRef.current.html, tagFor(lib), lib.url);
+      if (!result.added) {
+        notify('success', `${lib.name} is already in the HTML`);
+        return;
+      }
+      dispatch({ type: 'edit', field: 'html', value: result.html });
+      notify('success', `Added ${label} to HTML`);
+    },
+    [dispatch, notify],
   );
 
   const selectTab = useCallback((tab: CodeField) => {
@@ -491,6 +507,7 @@ export function App() {
                     onChange={onEdit}
                     onSave={() => void save()}
                     onRun={rerun}
+                    onInsertLibrary={onInsertLibrary}
                     dark={dark}
                   />
                 </Suspense>

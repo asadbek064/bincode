@@ -41,6 +41,7 @@ src/client/
     main.tsx, App.tsx, styles.css
     components/      Toolbar (3-zone navbar) + Toolbar.css, SharePopover, AccountMenu, Popover,
                      Icons, EditorPane (lazy; tabs, Format, editor settings) + EditorPane.css,
+                     LibrarySearch + .css (CDNJS search popover),
                      PreviewPane, ConsoleDrawer + .css, SplitPane, Modal, LoginModal,
                      BinSettings (BinSettingsForm + modal wrapper), BinGate (password / burn gate),
                      SnippetsDashboard (collections sidebar), CollectionForm,
@@ -50,7 +51,8 @@ src/client/
     lib/             api (typed fetch client, ApiError), previewDoc (+ CONSOLE_BRIDGE), consoleTypes,
                      monaco (workers, bincode-light / bincode-dark themes),
                      drafts, storage (safe localStorage), unlockTokens (sessionStorage),
-                     binSettings (labels, pending settings), url, clipboard, template, time
+                     binSettings (labels, pending settings), cdnjs (search, tagFor, insertTag),
+                     url, clipboard, template, time
 scripts/add-user.ts  CLI user creation
 test/                *.test.ts, helpers.ts (makeApp), fixtures/client
 ```
@@ -128,14 +130,16 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 
 ### Client
 - No router: `?share=<id>` and `?collection=<id>` + `history.pushState` / `popstate` (`lib/url.ts`). Unlock tokens live in sessionStorage `bincode:unlock:<kind>:<id>` (tab-scoped on purpose) and are sent on reload.
-- **Navbar** (`Toolbar`, 56px): left = logo/wordmark (new bin), ghost title input, save status (Saved / Unsaved / Saving…); centre = Editor / Preview / Console toggles (console count badge, red on errors); right = Run/Pause, **Share**, **Save** (⌘S), account avatar menu (My snippets, New bin, Fork, Sign out) or Log in. Styles live in `Toolbar.css`, scoped `.toolbar.navbar` because component CSS is bundled before `styles.css`.
+- **Navbar** (`Toolbar`, 56px): left = logo/wordmark (new bin), ghost title input, save status (Saved / Unsaved / Saving…); centre = Editor / Preview / Console toggles (console count badge, red on errors); right = Run/Pause, **Share**, **Save** (⌘S), account avatar menu (My bins, New bin, Fork, Sign out) or Log in. Styles live in `Toolbar.css`, scoped `.toolbar.navbar` because component CSS is bundled before `styles.css`.
 - **Share** (`SharePopover`): on a saved bin it copies the link at once (toast) and opens a popover with the link and, for the owner, `BinSettingsForm`; on a new bin the popover shows the form with "Save & copy link", which calls `App.saveAndCopy(settings)` (settings passed explicitly — `pendingRef` would be stale until the next render). The first save via Save copies the link and toasts too; there is no share dialog any more.
-- **Settings form** (`BinSettingsForm`, used by Share and by the My snippets row gear via the `BinSettings` modal): visibility segments, a password field when needed, one "Delete" select (Never / After first view / After 10 min … 1 month — burn and expiry are one choice in the UI), and collection checkboxes (only if the user has collections). For a saved bin "Apply" sends PATCH at once and leaves editor content/dirty alone; for a new bin the choices are kept in App state (`pending`, never in drafts — no passwords in localStorage) and sent with the first POST, then collections are added.
+- **Settings form** (`BinSettingsForm`, used by Share and by the My bins row gear via the `BinSettings` modal): visibility segments, a password field when needed, one "Delete" select (Never / After first view / After 10 min … 1 month — burn and expiry are one choice in the UI), and collection checkboxes (only if the user has collections). For a saved bin "Apply" sends PATCH at once and leaves editor content/dirty alone; for a new bin the choices are kept in App state (`pending`, never in drafts — no passwords in localStorage) and sent with the first POST, then collections are added.
 - The workspace has a `view` (`App.tsx`): `'editor'`, `'blank'` (a `?share=`/`?collection=` link still loading), `{ locked }` or `{ unavailable }`. Anything but `'editor'` replaces the editor and preview, so a link never shows the demo snippet as if it were the bin: a locked bin shows only `BinGate` (an inline card: password and/or burn warning), a 404 shows "doesn't exist, has expired, or is private" with Log in / New bin. Save, Fork and the view toggles are hidden there, and `save()` refuses to run. A burned bin's content is loaded as a **new unsaved bin** so Save makes a copy.
 - State: `AuthProvider` (token in `localStorage['bincode:token']`, validated via `/api/auth/me`) and the `useSnippetEditor` reducer. No state library.
 - Save: not logged in → login then retry; owner → PUT (same link); someone else's → fork; new → POST.
 - Drafts: `localStorage['bincode:draft:<shareId|new>']`, debounced, restored/offered via `DraftBanner`, cleared on save. Drafts hold content only.
 - Monaco is code-split (lazy `EditorPane`) and its workers are bundled with Vite `?worker` imports (`lib/monaco.ts`). Editor prefs (font size 12/14/16, word wrap) persist in `localStorage['bincode:editor']`. Format runs `editor.action.formatDocument`.
+- **CDNJS libraries**: a small "+" beside the HTML and JavaScript tab labels opens `LibrarySearch` (a `Popover` anchored to the editor header, because the tab bar scrolls and would clip it). The query is debounced (250ms), stale requests are aborted, results are cached per query. The browser calls `https://api.cdnjs.com/libraries?search=…&fields=version,description,filename,sri` directly — the app CSP's `connect-src` allows exactly that origin. `lib/cdnjs.ts` keeps only `https://cdnjs.cloudflare.com/` URLs and well-formed `sha256/384/512-` SRI values (third-party data), `tagFor` builds `<script>` or (for `.css`) `<link>` with `integrity` + `crossorigin="anonymous"`, and `insertTag` prepends it to the HTML panel unless the URL is already there. `lib/cdnjs.ts` has no DOM imports and is compiled by the server tsconfig for `test/cdnjs.test.ts`.
+- User-facing name: "My bins" (the component is still `SnippetsDashboard`).
 - Theme: light-first slate/emerald tokens in `styles.css` `:root`, mirrored for `prefers-color-scheme: dark`; use the variables, never hard-coded colours (Tailwind is deliberately not used).
 - Shortcuts: ⌘/Ctrl+S save, ⌘/Ctrl+Enter re-run, ⌘/Ctrl+1/2/3 tabs (registered both in Monaco and globally).
 
@@ -157,7 +161,7 @@ Also `createCollection(t, email, body?)` and `addToCollection(t, email, collecti
 
 `makeApp({ quotas })` lowers quotas for tests.
 
-Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `security.test.ts` (no-store, preview sandbox, body caps, quotas, access matrix, forged tokens, IDOR, mass assignment), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
+Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `security.test.ts` (no-store, preview sandbox, body caps, quotas, access matrix, forged tokens, IDOR, mass assignment), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `cdnjs.test.ts` (CDNJS response mapping, tag building, no duplicates), `previewDoc.test.ts` (unit test of the client's pure preview builder — keep `previewDoc.ts` free of DOM imports; it is included in the server tsconfig for this reason).
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.

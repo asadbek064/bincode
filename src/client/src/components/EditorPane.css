@@ -167,3 +167,44 @@
 .switch.on .switch-thumb {
   transform: translateX(14px);
 }
+
+/* A tab plus its optional CDNJS "+" button share one background and indicator area. */
+.editor-header .tab-group {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  transition: background-color var(--ease);
+}
+
+.editor-header .tab-group.active {
+  background: var(--bg);
+}
+
+.editor-header .tab-group.active .tab {
+  background: transparent;
+}
+
+.editor-header .tab-add {
+  align-self: center;
+  min-height: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0 0.4rem 0 -0.45rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.editor-header .tab-add svg {
+  width: 14px;
+  height: 14px;
+}
+
+.editor-header .tab-add:hover:not(:disabled),
+.editor-header .tab-add.open {
+  border-color: var(--primary-border);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}

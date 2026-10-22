@@ -1,0 +1,107 @@
+.popover.lib-popover {
+  width: min(380px, calc(100vw - 16px));
+  max-width: none;
+  padding: 0.6rem;
+}
+
+.lib-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* type="search" isn't covered by the global input rule in styles.css. */
+.lib-search .lib-search-input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  outline: none;
+}
+
+.lib-search-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.lib-search-status {
+  padding: 0.4rem 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.lib-search-status.error {
+  color: var(--danger);
+}
+
+.lib-search-results {
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.lib-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  transition: background-color var(--ease);
+}
+
+.lib-option + .lib-option {
+  border-top: 1px solid var(--border);
+}
+
+.lib-option.active {
+  background: var(--surface-hover);
+}
+
+.lib-option-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.lib-option-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-option.active .lib-option-name {
+  color: var(--primary-strong);
+}
+
+.lib-option-version {
+  flex-shrink: 0;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.lib-option.active .lib-option-version {
+  background: var(--bg);
+}
+
+.lib-option-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

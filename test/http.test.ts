@@ -47,6 +47,8 @@ test('app pages get the strict CSP and SPA fallback', async () => {
     assert.match(csp, /frame-ancestors 'self'/);
     assert.match(csp, /object-src 'none'/);
     assert.match(csp, /worker-src 'self' blob:/);
+    // Only the CDNJS search API is reachable besides our own origin.
+    assert.match(csp, /connect-src 'self' https:\/\/api\.cdnjs\.com(;|$)/);
     assert.doesNotMatch(csp, /unsafe-eval/);
   }
   // Files that don't exist must not fall back to index.html.

@@ -4,7 +4,9 @@ import type { OnMount } from '@monaco-editor/react';
 import { DARK_THEME, LIGHT_THEME, defineThemes, monaco } from '../lib/monaco.ts';
 import { readJson, writeJson } from '../lib/storage.ts';
 import type { CodeField } from '../hooks/useSnippetEditor.ts';
-import { FormatIcon, SettingsIcon } from './Icons.tsx';
+import type { CdnLibrary } from '../lib/cdnjs.ts';
+import { FormatIcon, PlusIcon, SettingsIcon } from './Icons.tsx';
+import { LibrarySearch } from './LibrarySearch.tsx';
 import { Popover } from './Popover.tsx';
 import './EditorPane.css';
 
@@ -60,10 +62,16 @@ interface EditorPaneProps {
   onSave: () => void;
   /** Ctrl/Cmd+Enter inside the editor */
   onRun?: () => void;
+  /** a CDNJS result was picked; the tag goes into the HTML panel */
+  onInsertLibrary: (lib: CdnLibrary) => void;
   dark: boolean;
 }
 
-export default function EditorPane({ activeTab, onTabChange, values, onChange, onSave, onRun, dark }: EditorPaneProps) {
+/** Tabs that offer the CDNJS "+" button (libraries are always added to the HTML panel). */
+const LIBRARY_TABS: readonly CodeField[] = ['html', 'js'];
+
+export default function EditorPane(props: EditorPaneProps) {
+  const { activeTab, onTabChange, values, onChange, onSave, onRun, onInsertLibrary, dark } = props;
   // Monaco commands are registered once at mount; refs keep them calling the latest handlers.
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
@@ -91,6 +99,11 @@ export default function EditorPane({ activeTab, onTabChange, values, onChange, o
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
+  // Which tab's "+" opened the library search; its button is the popover's anchor for outside clicks.
+  const [libraryFrom, setLibraryFrom] = useState<CodeField | null>(null);
+  const libraryButtons = useRef<Partial<Record<CodeField, HTMLButtonElement | null>>>({});
+  const libraryAnchor = useRef<HTMLButtonElement | null>(null);
+  libraryAnchor.current = libraryFrom ? (libraryButtons.current[libraryFrom] ?? null) : null;
 
   // The <Editor> only syncs `value` into the visible model. Models for the other
   // tabs keep stale text after a load/reset, so push changes into them directly.
@@ -152,23 +165,56 @@ export default function EditorPane({ activeTab, onTabChange, values, onChange, o
 
   return (
     <div className="editor-pane">
-      <div className="editor-header">
+      {/* The header is the popover anchor: the tab bar scrolls horizontally and would clip it. */}
+      <div className="editor-header popover-anchor">
         <div className="tab-bar" role="tablist" aria-label="Code">
           {TABS.map((t, i) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={t.id === activeTab}
-              className={t.id === activeTab ? 'tab active' : 'tab'}
-              onClick={() => onTabChange(t.id)}
-              title={`${t.label} (Ctrl+${i + 1})`}
-            >
-              <span className={`tab-dot tab-dot-${t.id}`} aria-hidden="true" />
-              {t.label}
-            </button>
+            <div key={t.id} role="presentation" className={t.id === activeTab ? 'tab-group active' : 'tab-group'}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={t.id === activeTab}
+                className={t.id === activeTab ? 'tab active' : 'tab'}
+                onClick={() => onTabChange(t.id)}
+                title={`${t.label} (Ctrl+${i + 1})`}
+              >
+                <span className={`tab-dot tab-dot-${t.id}`} aria-hidden="true" />
+                {t.label}
+              </button>
+              {LIBRARY_TABS.includes(t.id) && (
+                <button
+                  ref={(el) => {
+                    libraryButtons.current[t.id] = el;
+                  }}
+                  type="button"
+                  className={libraryFrom === t.id ? 'tab-add open' : 'tab-add'}
+                  aria-label="Add library from CDNJS"
+                  title="Add library from CDNJS"
+                  aria-haspopup="dialog"
+                  aria-expanded={libraryFrom === t.id}
+                  onClick={() => setLibraryFrom((from) => (from === t.id ? null : t.id))}
+                >
+                  <PlusIcon />
+                </button>
+              )}
+            </div>
           ))}
         </div>
+        <Popover
+          open={libraryFrom !== null}
+          onClose={() => setLibraryFrom(null)}
+          anchorRef={libraryAnchor}
+          align="start"
+          label="Add library from CDNJS"
+          className="lib-popover"
+        >
+          <LibrarySearch
+            onInsert={(lib) => {
+              setLibraryFrom(null);
+              onInsertLibrary(lib);
+            }}
+          />
+        </Popover>
         <div className="editor-actions">
           <button
             type="button"

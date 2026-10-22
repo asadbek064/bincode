@@ -168,7 +168,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
   const visible = selected ? allSnippets.filter((s) => selected.members?.has(s.shareId)) : allSnippets;
 
   return (
-    <Modal title="My snippets" onClose={onClose} className="modal-wide modal-dashboard">
+    <Modal title="My bins" onClose={onClose} className="modal-wide modal-dashboard">
       {state.status === 'loading' && <p className="muted">Loading…</p>}
       {state.status === 'error' && (
         <p className="form-error" role="alert">
