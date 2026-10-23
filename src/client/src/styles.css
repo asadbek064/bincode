@@ -1,26 +1,34 @@
 :root {
   color-scheme: light dark;
   /* Light-first slate + emerald palette; the dark block below mirrors it for OS dark mode. */
-  --primary: #059669;
-  --primary-strong: #047857;
+  /* Emerald-700 rather than -600: it doubles as text colour (status, links), so it must clear 4.5:1. */
+  --primary: #047857;
+  --primary-strong: #065f46;
   --primary-soft: #ecfdf5;
-  --primary-border: #a7f3d0;
-  --accent: #10b981;
   --on-primary: #ffffff;
-  --focus: #10b981;
+  --focus: #047857;
   --border: #e2e8f0;
+  /* Form controls sit on the same --bg as their container, so their border must reach 3:1. */
+  --input-border: #8592a6;
   --text: #0f172a;
-  --text-muted: #64748b;
+  --text-muted: #5b6b7f;
   --bg: #ffffff;
   --surface: #f8fafc;
   --surface-hover: #f1f5f9;
-  --danger: #dc2626;
-  --danger-soft: rgba(220, 38, 38, 0.08);
-  --warning: #d97706;
+  --danger: #b91c1c;
+  --danger-soft: rgba(185, 28, 28, 0.08);
+  --on-danger: #ffffff;
+  --warning: #b45309;
   --warning-bg: #fffbeb;
   --warning-border: #fcd34d;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
   --shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  --backdrop: rgba(15, 23, 42, 0.5);
+  /* A snippet page's default canvas is white in both schemes, like a real browser tab. */
+  --preview-bg: #ffffff;
+  --lang-html: #ea580c;
+  --lang-css: #2563eb;
+  --lang-js: #eab308;
   --radius: 6px;
   --toolbar-h: 56px;
   --ease: 150ms ease;
@@ -31,24 +39,27 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --primary: #10b981;
-    --primary-strong: #059669;
+    --primary-strong: #34d399;
     --primary-soft: rgba(16, 185, 129, 0.14);
-    --primary-border: rgba(16, 185, 129, 0.4);
     --on-primary: #022c22;
     --focus: #34d399;
-    --border: #1e293b;
+    /* Between slate-800 and -700, so it still shows on a --surface-hover fill. */
+    --border: #263347;
+    --input-border: #64748b;
     --text: #e2e8f0;
     --text-muted: #94a3b8;
     --bg: #0f172a;
-    --surface: #111827;
+    --surface: #151f32;
     --surface-hover: #1e293b;
     --danger: #f87171;
     --danger-soft: rgba(248, 113, 113, 0.15);
+    --on-danger: #450a0a;
     --warning: #fbbf24;
     --warning-bg: #3b2e00;
     --warning-border: #9e6a03;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --backdrop: rgba(2, 6, 23, 0.6);
   }
 }
 
@@ -80,7 +91,7 @@ body {
 }
 
 ::selection {
-  background: var(--primary-soft);
+  background: color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 ::-webkit-scrollbar {
@@ -155,12 +166,12 @@ button.primary:hover:not(:disabled) {
 button.danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
+  color: var(--on-danger);
 }
 
+/* Mixing toward --text darkens in light mode and lightens in dark, raising contrast in both. */
 button.danger:hover:not(:disabled) {
-  background: var(--danger);
-  filter: brightness(1.1);
+  background: color-mix(in srgb, var(--danger), var(--text) 15%);
 }
 
 .icon-button {
@@ -194,7 +205,7 @@ textarea {
   font-size: 0.9rem;
   width: 100%;
   padding: 0.45rem 0.7rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
@@ -217,11 +228,21 @@ select:focus,
 select:focus-visible {
   outline: none;
   border-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--primary-soft);
+  box-shadow: 0 0 0 1px var(--focus);
 }
 
 .muted {
   color: var(--text-muted);
+}
+
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Layout */
@@ -238,105 +259,7 @@ select:focus-visible {
   display: flex;
 }
 
-/* Toolbar */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-height: var(--toolbar-h);
-  padding: 0.25rem 0.75rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-  font-weight: 600;
-  font-size: 1.05rem;
-  color: var(--text);
-  text-decoration: none;
-  border-radius: var(--radius);
-}
-
-.brand img {
-  display: block;
-  border-radius: 5px;
-}
-
-.title-area {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.title-input {
-  max-width: 300px;
-}
-
-.title-text {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dirty-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--primary);
-  flex-shrink: 0;
-}
-
-.toggles {
-  display: flex;
-  align-items: center;
-}
-
-.toggle {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0.35rem 0.5rem;
-}
-
-.toggle:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.toggle[aria-pressed='true'] {
-  color: var(--text);
-}
-
-.toggle svg {
-  width: 15px;
-  height: 15px;
-}
-
-.toggle.toggle-paused {
-  color: var(--on-primary);
-  background: var(--primary);
-}
-
-.toggle.toggle-paused:hover:not(:disabled) {
-  color: var(--on-primary);
-  background: var(--primary-strong);
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* Thin indeterminate progress bar while a snippet loads */
+/* Thin indeterminate progress bar while a bin loads */
 .loading-bar {
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--primary), transparent);
@@ -446,6 +369,19 @@ select:focus-visible {
   outline: none;
 }
 
+/* Fingers need a wider grab area than the 2px line shows. */
+@media (pointer: coarse) {
+  .split-handle::before {
+    content: '';
+    position: absolute;
+    inset: 0 -10px;
+  }
+
+  .split-vertical .split-handle::before {
+    inset: -10px 0;
+  }
+}
+
 .split.dragging {
   cursor: col-resize;
   user-select: none;
@@ -503,11 +439,6 @@ select:focus-visible {
   font-weight: 500;
 }
 
-.tab-icon {
-  width: 16px;
-  height: 16px;
-}
-
 .editor-content {
   position: relative;
   flex: 1;
@@ -529,7 +460,7 @@ select:focus-visible {
 /* Preview */
 .preview-pane {
   position: relative;
-  background: #fff;
+  background: var(--preview-bg);
 }
 
 .preview-pane iframe {
@@ -537,7 +468,7 @@ select:focus-visible {
   width: 100%;
   height: 100%;
   border: 0;
-  background: #fff;
+  background: var(--preview-bg);
 }
 
 .preview-badge {
@@ -549,8 +480,10 @@ select:focus-visible {
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  background: var(--primary);
-  color: var(--on-primary);
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
   pointer-events: none;
 }
 
@@ -563,13 +496,15 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--backdrop);
 }
 
 .modal {
   width: 100%;
   max-width: 480px;
   max-height: calc(100vh - 2rem);
+  /* iOS Safari's 100vh is the viewport with its toolbars hidden, which this page never does. */
+  max-height: calc(100dvh - 2rem);
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -741,9 +676,17 @@ select:focus-visible {
   font-weight: 500;
 }
 
+.snippet-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .snippet-meta {
+  max-width: 100%;
   font-size: 0.8rem;
   color: var(--text-muted);
+  white-space: normal;
 }
 
 .snippet-actions {
@@ -762,23 +705,7 @@ select:focus-visible {
   color: var(--text-muted);
 }
 
-.badge-primary {
-  border-color: var(--primary);
-  color: var(--text);
-}
-
 /* Bin settings */
-.settings-button {
-  flex-shrink: 0;
-  font-weight: 500;
-}
-
-.settings-button.visibility-private,
-.settings-button.visibility-password {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-
 .segmented {
   display: flex;
   border: 1px solid var(--border);
@@ -1007,62 +934,37 @@ select:focus-visible {
 }
 
 /* Responsive */
-@media (max-width: 1100px) {
-  .toggle-label,
-  .brand-name,
-  .actions button:not(.primary) .action-label {
-    display: none;
-  }
-
-  .title-input {
-    min-width: 7rem;
-  }
-}
-
 @media (max-width: 768px) {
-  .toolbar {
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    padding: 0.35rem 0.5rem;
-  }
-
-  .title-area {
-    order: 3;
-    flex-basis: 100%;
-  }
-
-  .title-input {
-    max-width: none;
-  }
-
-  .toggles {
-    margin-left: auto;
-  }
-
-  .action-label {
-    display: none;
-  }
-
-  .actions button {
-    padding: 0.35rem 0.5rem;
-  }
-
   .snippet-row {
     flex-wrap: wrap;
+    gap: 0 0.5rem;
+  }
+
+  /* The actions drop to their own line instead of squeezing the title to a few characters. */
+  .snippet-open {
+    flex-basis: 100%;
   }
 
   .dashboard {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* One scrolling strip, so many collections don't push the bins off screen. */
   .collection-nav {
     position: static;
     flex-direction: row;
-    flex-wrap: wrap;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .collection-link,
+  .collection-new {
+    flex-shrink: 0;
   }
 
   .collection-name {
-    flex: none;
+    flex: 0 1 auto;
+    max-width: 12rem;
   }
 
   .snippet-actions {
@@ -1081,6 +983,9 @@ select:focus-visible {
   z-index: 50;
   min-width: 220px;
   max-width: min(360px, calc(100vw - 16px));
+  /* max-height is set from the anchor's position (Popover.tsx), so short screens scroll it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1094,4 +999,17 @@ select:focus-visible {
 
 .popover-end {
   right: 0;
+}
+
+/* iOS zooms into any focused field under 16px and stays zoomed in this fixed-height layout. */
+@media (pointer: coarse) {
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  select,
+  textarea,
+  .navbar .nav-title-input {
+    font-size: 16px;
+  }
 }

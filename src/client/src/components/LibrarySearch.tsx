@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts';
 import { cachedLibraries, searchLibraries, type CdnLibrary } from '../lib/cdnjs.ts';
@@ -22,6 +22,8 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
   const debounced = useDebouncedValue(query.trim(), DEBOUNCE_MS);
   const [state, setState] = useState<SearchState>({ status: 'idle' });
   const [active, setActive] = useState(0);
+  const listId = useId();
+  const optionId = (i: number) => `${listId}-${i}`;
 
   useEffect(() => {
     if (!debounced) {
@@ -54,7 +56,7 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
   // Only keyboard moves scroll the list; a hovered row is already in view.
   const moveTo = (next: number) => {
     setActive(next);
-    document.getElementById(`lib-option-${next}`)?.scrollIntoView({ block: 'nearest' });
+    document.getElementById(optionId(next))?.scrollIntoView({ block: 'nearest' });
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -76,10 +78,13 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
     <div className="lib-search">
       <input
         type="search"
+        role="combobox"
         placeholder="Search CDNJS…"
         aria-label="Search CDNJS libraries"
-        aria-controls="lib-search-results"
-        aria-activedescendant={results.length ? `lib-option-${active}` : undefined}
+        aria-autocomplete="list"
+        aria-expanded={results.length > 0}
+        aria-controls={results.length ? listId : undefined}
+        aria-activedescendant={results.length ? optionId(active) : undefined}
         value={query}
         maxLength={100}
         spellCheck={false}
@@ -87,21 +92,29 @@ export function LibrarySearch({ onInsert }: LibrarySearchProps) {
         onKeyDown={onKeyDown}
       />
       <p className="form-hint">
-        Type a library name to fetch from CDNJS URL - add directly into the HTML panel as a SCRIPT or LINK
+        Adds a &lt;script&gt; or &lt;link&gt; tag to the HTML panel.
       </p>
-      {state.status === 'loading' && <p className="muted">Searching…</p>}
+      {/* Always mounted, so screen readers announce each change of the search status. */}
+      <div role="status" aria-live="polite">
+        {state.status === 'loading' && <p className="muted">Searching…</p>}
+        {state.status === 'ready' && results.length === 0 && <p className="muted">No libraries found.</p>}
+        {results.length > 0 && (
+          <span className="visually-hidden">
+            {results.length} {results.length === 1 ? 'library' : 'libraries'} found
+          </span>
+        )}
+      </div>
       {state.status === 'error' && (
         <p className="form-error" role="alert">
           Could not reach CDNJS.
         </p>
       )}
-      {state.status === 'ready' && results.length === 0 && <p className="muted">No libraries found.</p>}
       {results.length > 0 && (
-        <ul id="lib-search-results" className="lib-search-results" role="listbox" aria-label="Libraries">
+        <ul id={listId} className="lib-search-results" role="listbox" aria-label="Libraries">
           {results.map((lib, i) => (
             <li
               key={lib.name}
-              id={`lib-option-${i}`}
+              id={optionId(i)}
               role="option"
               aria-selected={i === active}
               className={i === active ? 'lib-option active' : 'lib-option'}

@@ -1,7 +1,7 @@
 /*
  * Navbar. This file is bundled *before* styles.css (main.tsx imports App before styles.css), so
  * every rule is scoped under `.navbar` (or `.toolbar.navbar`) to outrank the generic button/input
- * rules and the old toolbar rules there, including their hover states.
+ * rules there, including their hover states.
  */
 .toolbar.navbar {
   position: relative;
@@ -130,7 +130,7 @@
 }
 
 .navbar .nav-status-saved {
-  color: var(--primary);
+  color: var(--text-muted);
 }
 
 .navbar .nav-status-unsaved {
@@ -183,7 +183,13 @@
 
 .navbar .nav-badge-error {
   background: var(--danger);
-  color: #fff;
+  color: var(--on-danger);
+}
+
+/* Errors must not be signalled by colour alone. */
+.navbar .nav-badge-error::before {
+  content: '!';
+  margin-right: 1px;
 }
 
 /* Actions */
@@ -193,7 +199,9 @@
   font-weight: 500;
 }
 
+/* Save is the one emerald control; the other actions are secondary. */
 .navbar .nav-run,
+.navbar .nav-share,
 .navbar .nav-login {
   background: var(--bg);
   border-color: var(--border);
@@ -201,24 +209,10 @@
 }
 
 .navbar .nav-run:hover:not(:disabled),
+.navbar .nav-share:hover:not(:disabled),
+.navbar .nav-share[aria-expanded='true'],
 .navbar .nav-login:hover:not(:disabled) {
   background: var(--surface-hover);
-}
-
-.navbar .nav-run-play {
-  color: var(--primary);
-}
-
-.navbar .nav-share {
-  background: var(--primary-soft);
-  border-color: var(--primary-border);
-  color: var(--primary-strong);
-}
-
-.navbar .nav-share:hover:not(:disabled),
-.navbar .nav-share[aria-expanded='true'] {
-  background: color-mix(in srgb, var(--primary-soft), var(--primary) 12%);
-  border-color: var(--primary);
 }
 
 .navbar .nav-right .nav-save {
@@ -239,7 +233,6 @@
 .navbar .nav-save .nav-kbd {
   background: color-mix(in srgb, currentColor 18%, transparent);
   color: inherit;
-  opacity: 0.85;
 }
 
 .navbar .nav-right .nav-avatar {
@@ -247,18 +240,17 @@
   height: 32px;
   min-height: 32px;
   padding: 0;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: 50%;
-  background: var(--primary);
-  color: var(--on-primary);
+  background: var(--surface-hover);
+  color: var(--text);
   font-weight: 700;
   font-size: 0.9rem;
 }
 
 .navbar .nav-right .nav-avatar:hover:not(:disabled),
 .navbar .nav-right .nav-avatar[aria-expanded='true'] {
-  background: var(--primary-strong);
-  box-shadow: 0 0 0 3px var(--primary-soft);
+  background: var(--border);
 }
 
 /* Share popover */

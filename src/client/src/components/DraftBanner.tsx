@@ -13,7 +13,7 @@ export function DraftBanner({ offer, onRestore, onDiscard }: DraftBannerProps) {
     <div className={offer.stale ? 'banner banner-warning' : 'banner'} role="status">
       <span>
         You have unsaved changes to this snippet from {when}.
-        {offer.stale && ' The snippet has been updated since; restoring will overwrite the newer version.'}
+        {offer.stale && ' The bin has been updated since; restoring will overwrite the newer version.'}
       </span>
       <span className="banner-actions">
         <button type="button" className="primary" onClick={onRestore}>

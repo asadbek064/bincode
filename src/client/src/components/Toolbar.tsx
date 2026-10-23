@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { User, Visibility } from '../../../shared/api.ts';
-import { LIMITS } from '../../../shared/constants.ts';
+import { DEFAULT_TITLE, LIMITS } from '../../../shared/constants.ts';
 import { AccountMenu } from './AccountMenu.tsx';
 import { CodeIcon, ConsoleIcon, EyeIcon, ForkIcon, KeyIcon, LinkIcon, LockIcon, PauseIcon, PlayIcon, SaveIcon } from './Icons.tsx';
 import { SharePopover } from './SharePopover.tsx';
@@ -66,7 +66,7 @@ interface ToggleProps {
 
 function Toggle({ pressed, label, title, onClick, icon, badge }: ToggleProps) {
   return (
-    <button type="button" className="nav-toggle" aria-pressed={pressed} onClick={onClick} title={title} aria-label={label}>
+    <button type="button" className="nav-toggle" aria-pressed={pressed} onClick={onClick} title={title}>
       {icon}
       <span className="nav-label">{label}</span>
       {badge}
@@ -91,9 +91,9 @@ export function Toolbar(props: ToolbarProps) {
   const saveLabel = saveMode === 'fork' ? 'Fork' : 'Save';
   const saveTitle =
     saveMode === 'fork'
-      ? `Save a copy of this snippet to your account (${MOD}S)`
+      ? `Save a copy of this bin to your account (${MOD}S)`
       : saveMode === 'update'
-        ? `Save changes to this snippet (${MOD}S)`
+        ? `Save changes to this bin (${MOD}S)`
         : `Save and get a share link (${MOD}S)`;
 
   return (
@@ -102,7 +102,7 @@ export function Toolbar(props: ToolbarProps) {
         <a
           className="nav-brand"
           href="/"
-          title="BinCode - new snippet"
+          title="New bin"
           onClick={(e) => {
             e.preventDefault();
             props.onNew();
@@ -123,13 +123,13 @@ export function Toolbar(props: ToolbarProps) {
               type="text"
               value={title}
               maxLength={LIMITS.titleMax}
-              placeholder="Untitled Snippet"
-              aria-label="Snippet title"
+              placeholder={DEFAULT_TITLE}
+              aria-label="Bin title"
               onChange={(e) => props.onTitleChange(e.target.value)}
             />
           ) : (
-            <span className="nav-title-text" title={title || 'Untitled Snippet'}>
-              {title || 'Untitled Snippet'}
+            <span className="nav-title-text" title={title || DEFAULT_TITLE}>
+              {title || DEFAULT_TITLE}
             </span>
           )}
           {!locked && <SaveStatus saving={saving} saved={props.saved} dirty={props.dirty} />}
@@ -160,23 +160,26 @@ export function Toolbar(props: ToolbarProps) {
             icon={<ConsoleIcon />}
             badge={
               props.consoleCount > 0 && (
-                <span
-                  className={props.consoleErrors > 0 ? 'nav-badge nav-badge-error' : 'nav-badge'}
-                  aria-label={
-                    props.consoleErrors > 0
-                      ? `${props.consoleCount} console entries, ${props.consoleErrors} errors`
-                      : `${props.consoleCount} console entries`
-                  }
-                >
-                  {props.consoleCount > 99 ? '99+' : props.consoleCount}
-                </span>
+                <>
+                  <span
+                    className={props.consoleErrors > 0 ? 'nav-badge nav-badge-error' : 'nav-badge'}
+                    aria-hidden="true"
+                  >
+                    {props.consoleCount > 99 ? '99+' : props.consoleCount}
+                  </span>
+                  <span className="visually-hidden">
+                    {`, ${props.consoleCount} ${props.consoleCount === 1 ? 'entry' : 'entries'}`}
+                    {props.consoleErrors > 0 &&
+                      `, ${props.consoleErrors} ${props.consoleErrors === 1 ? 'error' : 'errors'}`}
+                  </span>
+                </>
               )
             }
           />
         </div>
       )}
 
-      <nav className="nav-right" aria-label="Snippet">
+      <div className="nav-right" role="group" aria-label="Bin actions">
         {!locked && (
           <>
             <button
@@ -186,7 +189,7 @@ export function Toolbar(props: ToolbarProps) {
               title={props.paused ? `Run and resume live preview (${MOD}Enter)` : 'Pause live preview'}
               aria-label={props.paused ? 'Run' : 'Pause'}
             >
-              {props.paused ? <PlayIcon className="nav-run-play" /> : <PauseIcon />}
+              {props.paused ? <PlayIcon /> : <PauseIcon />}
               <span className="nav-label">{props.paused ? 'Run' : 'Pause'}</span>
               {props.paused && <kbd className="nav-kbd">{MOD}↵</kbd>}
             </button>
@@ -219,7 +222,7 @@ export function Toolbar(props: ToolbarProps) {
             Log in
           </button>
         )}
-      </nav>
+      </div>
     </header>
   );
 }

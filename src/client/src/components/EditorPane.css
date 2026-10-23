@@ -73,15 +73,15 @@
 }
 
 .tab-dot-html {
-  background: #ea580c;
+  background: var(--lang-html);
 }
 
 .tab-dot-css {
-  background: #2563eb;
+  background: var(--lang-css);
 }
 
 .tab-dot-js {
-  background: #eab308;
+  background: var(--lang-js);
 }
 
 .editor-actions {
@@ -139,7 +139,7 @@
   height: 20px;
   padding: 0;
   border-radius: 999px;
-  border-color: var(--border);
+  border-color: var(--input-border);
   background: var(--surface-hover);
 }
 
@@ -185,9 +185,9 @@
 .editor-header .tab-add {
   align-self: center;
   min-height: 0;
-  width: 20px;
-  height: 20px;
-  margin: 0 0.4rem 0 -0.45rem;
+  width: 24px;
+  height: 24px;
+  margin: 0 0.3rem 0 -0.4rem;
   padding: 0;
   border-radius: 4px;
 }

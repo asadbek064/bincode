@@ -82,6 +82,7 @@ Behaviours worth knowing:
 - `updatedAt` is bumped by ≥1ms on every update, and lists are ordered by `updated_at DESC` with insertion order as tiebreaker.
 - Body size: only snippet create/update/fork (`POST /api/snippets`, `PUT /api/snippets/:id`, `POST /api/snippets/:id/fork`) accept up to 2MB; every other body is capped at 16kb, so anonymous endpoints can't be fed megabytes before a limit applies. Malformed JSON → 400, too large → 413.
 - Every `/api` response carries `Cache-Control: no-store` (private / unlocked content must never land in a shared cache; `X-Unlock-Token` isn't `Authorization`, which caches already respect).
+- Static assets: `pnpm build` writes `.br` / `.gz` next to each file in `dist/client/assets` (`precompress()` in `vite.config.ts`); `app.ts` sends them by `Accept-Encoding` (brotli preferred), with `Vary`. Nothing else is compressed — API bodies mix tokens with reflected input (BREACH). `/preview.html` is cacheable for 5 minutes (the iframe is remounted on every run), `index.html` is `no-cache`.
 - `PUT /api/snippets/:id` changes content only; settings go through `PATCH` (ownership checked before validation, like PUT), so they apply without saving the code. `POST /api/snippets` takes optional `settings`.
 
 ### Access rules (security-critical)

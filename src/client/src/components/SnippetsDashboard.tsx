@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CollectionSummary, Snippet, SnippetSummary } from '../../../shared/api.ts';
 import * as api from '../lib/api.ts';
 import { copyText } from '../lib/clipboard.ts';
@@ -41,6 +41,17 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
   const [copied, setCopied] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Deleting (row → confirm) and the settings / collection modals (which replace this one) remove
+  // the focused control; this names the one to focus, by data-focus-key, once it's rendered again.
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    const el = document.querySelector<HTMLElement>(`[data-focus-key="${pendingFocus.current}"]`);
+    if (!el) return;
+    el.focus();
+    pendingFocus.current = null;
+  });
+
   // Reloaded after the settings panel closes, since it can change visibility and memberships.
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -50,7 +61,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
         if (!cancelled) setState({ status: 'ready', snippets: s.snippets, collections: c.collections });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setState({ status: 'error', message: errorMessage(err, 'Failed to load snippets.') });
+        if (!cancelled) setState({ status: 'error', message: errorMessage(err, 'Failed to load bins.') });
       });
     return () => {
       cancelled = true;
@@ -98,11 +109,12 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
     else setActionError('Could not copy the link.');
   };
 
-  const onDelete = async (shareId: string) => {
+  const onDelete = async (shareId: string, neighbour: string | undefined) => {
     setBusy(shareId);
     setActionError(null);
     try {
       await api.deleteSnippet(shareId);
+      pendingFocus.current = neighbour ? `open:${neighbour}` : 'all-bins';
       setState((s) =>
         s.status === 'ready' ? { ...s, snippets: s.snippets.filter((x) => x.shareId !== shareId) } : s,
       );
@@ -119,6 +131,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
       });
       onDeleted(shareId);
     } catch (err) {
+      pendingFocus.current = `delete:${shareId}`;
       setActionError(errorMessage(err, 'Delete failed.'));
     } finally {
       setBusy(null);
@@ -183,6 +196,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
               className={selected ? 'collection-link' : 'collection-link active'}
               aria-current={selected ? undefined : 'true'}
               onClick={() => void select(null)}
+              data-focus-key="all-bins"
             >
               <span className="collection-name">All bins</span>
               <span className="collection-count">{allSnippets.length}</span>
@@ -201,7 +215,15 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
                 <span className="collection-count">{c.snippetCount}</span>
               </button>
             ))}
-            <button type="button" className="collection-new" onClick={() => setEditing({ collection: null })}>
+            <button
+              type="button"
+              className="collection-new"
+              data-focus-key="new-collection"
+              onClick={() => {
+                pendingFocus.current = 'new-collection';
+                setEditing({ collection: null });
+              }}
+            >
               <PlusIcon />
               <span>New collection</span>
             </button>
@@ -224,13 +246,17 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
                       title="Copy the collection link"
                     >
                       <LinkIcon />
-                      <span>{copied === `c:${selectedCollection.shareId}` ? 'Copied!' : 'Copy link'}</span>
+                      <span>{copied === `c:${selectedCollection.shareId}` ? 'Copied' : 'Copy link'}</span>
                     </button>
                   )}
                   <button
                     type="button"
                     className="icon-button"
-                    onClick={() => setEditing({ collection: selectedCollection })}
+                    data-focus-key="edit-collection"
+                    onClick={() => {
+                      pendingFocus.current = 'edit-collection';
+                      setEditing({ collection: selectedCollection });
+                    }}
                     aria-label={`Edit ${selectedCollection.title}`}
                     title="Collection settings"
                   >
@@ -246,24 +272,36 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
               </p>
             )}
             {selected && selected.members === null && <p className="muted">Loading…</p>}
-            {allSnippets.length === 0 && <p className="muted">No snippets yet. Press Save to create your first one.</p>}
+            {allSnippets.length === 0 && <p className="muted">No bins yet. Press Save to create your first one.</p>}
             {selected?.members && visible.length === 0 && allSnippets.length > 0 && (
               <p className="muted">Empty. Add bins from their settings (gear button).</p>
             )}
 
             {visible.length > 0 && (
               <ul className="snippet-list">
-                {visible.map((s) => (
-                  <li key={s.shareId} className={s.shareId === currentShareId ? 'snippet-item current' : 'snippet-item'}>
+                {visible.map((s, i) => (
+                  <li
+                    key={s.shareId}
+                    className={s.shareId === currentShareId ? 'snippet-item current' : 'snippet-item'}
+                    aria-current={s.shareId === currentShareId ? 'true' : undefined}
+                  >
                     <div className="snippet-row">
-                      <button type="button" className="snippet-open" onClick={() => onOpen(s.shareId)}>
+                      <button
+                        type="button"
+                        className="snippet-open"
+                        data-focus-key={`open:${s.shareId}`}
+                        onClick={() => onOpen(s.shareId)}
+                      >
                         <span className="snippet-title">
                           {s.visibility !== 'unlisted' && (
                             <span className="row-icon" title={VISIBILITY_LABELS[s.visibility].hint}>
                               <VisibilityIcon visibility={s.visibility} />
                             </span>
                           )}
-                          {s.title}
+                          <span className="snippet-title-text">{s.title}</span>
+                          {s.visibility !== 'unlisted' && (
+                            <span className="visually-hidden">, {VISIBILITY_LABELS[s.visibility].label}</span>
+                          )}
                         </span>
                         <span className="snippet-meta" title={new Date(s.updatedAt).toLocaleString()}>
                           Updated {relativeTime(s.updatedAt)}
@@ -279,11 +317,19 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
                               type="button"
                               className="danger"
                               disabled={busy === s.shareId}
-                              onClick={() => onDelete(s.shareId)}
+                              onClick={() => onDelete(s.shareId, (visible[i + 1] ?? visible[i - 1])?.shareId)}
                             >
                               {busy === s.shareId ? 'Deleting…' : 'Delete'}
                             </button>
-                            <button type="button" onClick={() => setConfirming(null)} disabled={busy === s.shareId}>
+                            <button
+                              type="button"
+                              autoFocus
+                              onClick={() => {
+                                pendingFocus.current = `delete:${s.shareId}`;
+                                setConfirming(null);
+                              }}
+                              disabled={busy === s.shareId}
+                            >
                               Cancel
                             </button>
                           </>
@@ -291,12 +337,16 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
                           <>
                             <button type="button" onClick={() => onCopy(s.shareId, shareUrl(s.shareId))} title="Copy share link">
                               <LinkIcon />
-                              <span>{copied === s.shareId ? 'Copied!' : 'Copy link'}</span>
+                              <span>{copied === s.shareId ? 'Copied' : 'Copy link'}</span>
                             </button>
                             <button
                               type="button"
                               className="icon-button"
-                              onClick={() => setSettingsFor(s.shareId)}
+                              data-focus-key={`settings:${s.shareId}`}
+                              onClick={() => {
+                                pendingFocus.current = `settings:${s.shareId}`;
+                                setSettingsFor(s.shareId);
+                              }}
                               aria-label={`Settings for ${s.title}`}
                               title="Visibility, expiry and collections"
                             >
@@ -305,6 +355,7 @@ export function SnippetsDashboard({ currentShareId, onOpen, onDeleted, onSetting
                             <button
                               type="button"
                               className="icon-button danger-text"
+                              data-focus-key={`delete:${s.shareId}`}
                               onClick={() => setConfirming(s.shareId)}
                               aria-label={`Delete ${s.title}`}
                               title="Delete"

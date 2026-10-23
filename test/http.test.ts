@@ -76,6 +76,40 @@ test('fingerprinted assets are cached immutably', async () => {
   assert.match(String(res.headers['cache-control']), /max-age=31536000/);
 });
 
+test('assets are sent precompressed when the browser accepts it', async () => {
+  const t = makeApp();
+  const br = await request(t.app)
+    .get('/assets/app-abc123.js')
+    .set('Accept-Encoding', 'gzip, deflate, br')
+    .buffer(true)
+    .parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => cb(null, Buffer.concat(chunks)));
+    })
+    .expect(200);
+  assert.equal(br.headers['content-encoding'], 'br');
+  assert.match(String(br.headers['content-type']), /javascript/);
+  assert.match(String(br.headers['cache-control']), /immutable/);
+  assert.equal(br.headers['vary'], 'Accept-Encoding');
+
+  const gzip = await request(t.app).get('/assets/app-abc123.js').set('Accept-Encoding', 'gzip').expect(200);
+  assert.equal(gzip.headers['content-encoding'], 'gzip');
+  assert.equal(gzip.text, 'console.log("asset stub");\n');
+
+  const plain = await request(t.app).get('/assets/app-abc123.js').set('Accept-Encoding', 'identity').expect(200);
+  assert.equal(plain.headers['content-encoding'], undefined);
+  assert.equal(plain.headers['vary'], 'Accept-Encoding');
+});
+
+test('preview page is briefly cacheable, the app page is not', async () => {
+  const t = makeApp();
+  const preview = await request(t.app).get('/preview.html').expect(200);
+  assert.match(String(preview.headers['cache-control']), /max-age=300/);
+  const index = await request(t.app).get('/').expect(200);
+  assert.equal(index.headers['cache-control'], 'no-cache');
+});
+
 test('missing client build gives a helpful 404', async () => {
   const { createApp } = await import('../src/server/app.ts');
   const t = makeApp();

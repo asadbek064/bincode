@@ -62,26 +62,38 @@ export function defineThemes(): void {
       { token: 'attribute.name', foreground: '4338CA' },
       { token: 'attribute.value.html', foreground: '047857' },
       { token: 'string', foreground: '047857' },
+      { token: 'comment', foreground: '5B6B7F' },
     ],
+    // Hex copies of the styles.css tokens (Monaco can't read CSS variables): --bg, --surface, --text-muted.
     colors: {
       'editor.background': '#FFFFFF',
       'editor.foreground': '#334155',
-      'editorLineNumber.foreground': '#94A3B8',
+      'editorLineNumber.foreground': '#8592A6',
       'editorLineNumber.activeForeground': '#334155',
       'editor.lineHighlightBackground': '#F8FAFC',
       'editor.lineHighlightBorder': '#F8FAFC',
       'editorGutter.background': '#FFFFFF',
     },
   });
-  // vs-dark tokens with the app's slate surfaces, so the editor doesn't sit in a grey box in dark mode.
+  // The light theme's hues, lifted for a slate-900 background (all ≥ 6:1).
   monaco.editor.defineTheme(DARK_THEME, {
     base: 'vs-dark',
     inherit: true,
-    rules: [],
+    rules: [
+      { token: '', foreground: 'CBD5E1' },
+      { token: 'tag', foreground: '93C5FD' },
+      { token: 'metatag', foreground: '93C5FD' },
+      { token: 'metatag.content', foreground: '93C5FD' },
+      { token: 'attribute.name', foreground: 'A5B4FC' },
+      { token: 'attribute.value.html', foreground: '6EE7B7' },
+      { token: 'string', foreground: '6EE7B7' },
+      { token: 'comment', foreground: '94A3B8' },
+    ],
     colors: {
       'editor.background': '#0F172A',
+      'editor.foreground': '#CBD5E1',
       'editorGutter.background': '#0F172A',
-      'editorLineNumber.foreground': '#475569',
+      'editorLineNumber.foreground': '#64748B',
       'editorLineNumber.activeForeground': '#CBD5E1',
       'editor.lineHighlightBackground': '#1E293B',
       'editor.lineHighlightBorder': '#1E293B',

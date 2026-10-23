@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import Editor from '@monaco-editor/react';
 import type { OnMount } from '@monaco-editor/react';
 import { DARK_THEME, LIGHT_THEME, defineThemes, monaco } from '../lib/monaco.ts';
@@ -68,7 +69,7 @@ interface EditorPaneProps {
 }
 
 /** Tabs that offer the CDNJS "+" button (libraries are always added to the HTML panel). */
-const LIBRARY_TABS: readonly CodeField[] = ['html', 'js'];
+const LIBRARY_TABS: readonly CodeField[] = ['html'];
 
 export default function EditorPane({
   activeTab,
@@ -101,9 +102,36 @@ export default function EditorPane({
     });
   };
   const options = useMemo(
-    () => ({ ...OPTIONS, fontSize: prefs.fontSize, wordWrap: prefs.wordWrap ? 'on' : 'off' }) as const,
-    [prefs],
+    () =>
+      ({
+        ...OPTIONS,
+        fontSize: prefs.fontSize,
+        wordWrap: prefs.wordWrap ? 'on' : 'off',
+        ariaLabel: `${tab.label} code`,
+      }) as const,
+    [prefs, tab.label],
   );
+
+  // Tabs follow the ARIA tabs pattern: one Tab stop, arrow keys move between them.
+  const tabsId = useId();
+  const tabId = (id: CodeField) => `${tabsId}-${id}`;
+  const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const next =
+      e.key === 'ArrowRight'
+        ? (index + 1) % TABS.length
+        : e.key === 'ArrowLeft'
+          ? (index - 1 + TABS.length) % TABS.length
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? TABS.length - 1
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    const target = TABS[next]!;
+    onTabChange(target.id);
+    document.getElementById(tabId(target.id))?.focus();
+  };
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLButtonElement>(null);
@@ -179,9 +207,13 @@ export default function EditorPane({
               <button
                 type="button"
                 role="tab"
+                id={tabId(t.id)}
                 aria-selected={t.id === activeTab}
+                aria-controls={`${tabsId}-panel`}
+                tabIndex={t.id === activeTab ? 0 : -1}
                 className={t.id === activeTab ? 'tab active' : 'tab'}
                 onClick={() => onTabChange(t.id)}
+                onKeyDown={(e) => onTabKeyDown(e, i)}
                 title={`${t.label} (Ctrl+${i + 1})`}
               >
                 <span className={`tab-dot tab-dot-${t.id}`} aria-hidden="true" />
@@ -286,7 +318,7 @@ export default function EditorPane({
           </div>
         </div>
       </div>
-      <div className="editor-content" role="tabpanel">
+      <div className="editor-content" role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={tabId(tab.id)}>
         <Editor
           path={tab.path}
           language={tab.language}

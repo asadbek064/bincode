@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
+import { PREVIEW_PATH } from '../shared/constants.ts';
 import type { Config } from './config.ts';
 import type { Db } from './db.ts';
 import { createAuth } from './middleware/auth.ts';
@@ -93,13 +94,38 @@ export function createApp({ db, config, clientDir: rawClientDir, limits, quotas 
   api.use(notFound);
   app.use('/api', api);
 
+  // Vite fingerprints everything under assets/, so it can be cached forever.
+  const assetsDir = path.resolve(clientDir, 'assets');
+  const IMMUTABLE = 'public, max-age=31536000, immutable';
+
+  // `pnpm build` writes .br / .gz copies of the assets (vite.config.ts), so no CPU is spent per
+  // request and no compressing proxy is needed. Only these static files are compressed: API
+  // responses mix secrets (tokens) with reflected input, which is what BREACH exploits.
+  app.get(/^\/assets\/[\w-][\w.-]*$/, (req, res, next) => {
+    // Asked one by one: browsers list gzip before br, and a joint query would honour that order.
+    const encoding = req.acceptsEncodings('br') ? 'br' : req.acceptsEncodings('gzip') ? 'gzip' : null;
+    if (!encoding) return next();
+    const name = req.path.slice('/assets/'.length);
+    const compressed = path.join(assetsDir, `${name}.${encoding === 'br' ? 'br' : 'gz'}`);
+    if (!fs.existsSync(compressed)) return next();
+    res.setHeader('Content-Encoding', encoding);
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('Cache-Control', IMMUTABLE);
+    res.type(path.extname(name));
+    res.sendFile(compressed);
+  });
+
+  const previewFile = path.resolve(clientDir, PREVIEW_PATH.slice(1));
   app.use(
     express.static(clientDir, {
       index: false,
       setHeaders(res, filePath) {
-        // Vite fingerprints everything under assets/, so it can be cached forever.
-        if (filePath.startsWith(path.join(clientDir, 'assets') + path.sep)) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        if (filePath.startsWith(assetsDir + path.sep)) {
+          res.setHeader('Cache-Control', IMMUTABLE);
+          res.setHeader('Vary', 'Accept-Encoding');
+        } else if (filePath === previewFile) {
+          // The iframe is remounted for every run; without this each run waits for a 304 first.
+          res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
         }
       },
     }),

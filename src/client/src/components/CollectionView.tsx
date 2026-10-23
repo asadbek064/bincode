@@ -24,6 +24,8 @@ export function CollectionView({ shareId, onOpen, onClose }: CollectionViewProps
   const [password, setPassword] = useState('');
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
+  // After unlocking, the form (and the focused field) is replaced by the list.
+  const [unlocked, setUnlocked] = useState(false);
 
   const load = useCallback(async () => {
     const token = getUnlockToken('collection', shareId);
@@ -68,6 +70,7 @@ export function CollectionView({ shareId, onOpen, onClose }: CollectionViewProps
       saveUnlockToken('collection', shareId, res);
       setPassword('');
       await load();
+      setUnlocked(true);
     } catch (err) {
       setUnlockError(
         err instanceof ApiError && err.status === 403
@@ -101,6 +104,7 @@ export function CollectionView({ shareId, onOpen, onClose }: CollectionViewProps
             <input
               type="password"
               autoComplete="current-password"
+              autoFocus
               value={password}
               maxLength={LIMITS.passwordMax}
               onChange={(e) => setPassword(e.target.value)}
@@ -124,12 +128,17 @@ export function CollectionView({ shareId, onOpen, onClose }: CollectionViewProps
             <p className="muted">This collection is empty.</p>
           ) : (
             <ul className="snippet-list">
-              {state.data.snippets.map((s) => (
+              {state.data.snippets.map((s, i) => (
                 <li key={s.shareId} className="snippet-item">
                   <div className="snippet-row">
-                    <button type="button" className="snippet-open" onClick={() => onOpen(s.shareId)}>
+                    <button
+                      type="button"
+                      className="snippet-open"
+                      autoFocus={unlocked && i === 0}
+                      onClick={() => onOpen(s.shareId)}
+                    >
                       <span className="snippet-title">
-                        {s.title}
+                        <span className="snippet-title-text">{s.title}</span>
                         {s.visibility === 'password' && <span className="badge">password</span>}
                       </span>
                       <span className="snippet-meta" title={new Date(s.updatedAt).toLocaleString()}>

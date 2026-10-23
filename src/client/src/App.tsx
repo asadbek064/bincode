@@ -28,8 +28,12 @@ import { DEFAULT_PENDING, pendingToInput, type PendingSettings } from './lib/bin
 import { forgetUnlockToken, getUnlockToken, saveUnlockToken } from './lib/unlockTokens.ts';
 import { onShareIdChange, pushShareId, readCollectionId, readShareId, replaceShareId, shareUrl } from './lib/url.ts';
 
-// Monaco is ~3MB; loading it lazily lets the toolbar and preview paint first.
-const EditorPane = lazy(() => import('./components/EditorPane.tsx'));
+// Monaco is ~3MB; loading it lazily lets the toolbar and preview paint first. The download starts
+// right away rather than on first mount, so a ?share= link fetches it while the bin is loading.
+const editorChunk = import('./components/EditorPane.tsx');
+// Mark the rejection handled here; lazy() still sees it and the error boundary reports it.
+editorChunk.catch(() => undefined);
+const EditorPane = lazy(() => editorChunk);
 
 type ModalState =
   | { type: 'login' }
@@ -72,6 +76,7 @@ export function App() {
   const [showEditor, setShowEditor] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
   const [showConsole, setShowConsole] = useState(false);
+  const closeConsole = useCallback(() => setShowConsole(false), []);
   const [paused, setPaused] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -231,7 +236,7 @@ export function App() {
           }
           if (!fromShare) {
             const copied = await copyText(shareUrl(snippet.shareId));
-            notify('success', copied ? 'Saved. Link copied to clipboard!' : 'Saved.');
+            notify('success', copied ? 'Saved. Link copied.' : 'Saved.');
           }
           return snippet.shareId;
         }
@@ -241,7 +246,7 @@ export function App() {
           setModal({ type: 'login' });
           notify('error', 'Your session expired. Please log in again.');
         } else if (err instanceof ApiError && err.status === 404 && current) {
-          notify('error', 'This snippet no longer exists. Save again to create a new one.');
+          notify('error', 'This bin no longer exists. Save again to create a new one.');
           dispatch({ type: 'meta', current: null });
           replaceShareId(null);
         } else {
@@ -300,7 +305,7 @@ export function App() {
 
   const onNew = useCallback(() => {
     const s = stateRef.current;
-    if (!s.current && s.dirty && !window.confirm('Discard your unsaved snippet and start a new one?')) return;
+    if (!s.current && s.dirty && !window.confirm('Discard your unsaved bin and start a new one?')) return;
     if (s.current) drafts.flush();
     else drafts.clear(null);
     pushShareId(null);
@@ -364,7 +369,7 @@ export function App() {
         replaceShareId(null);
         startNew(false);
       }
-      notify('success', 'Snippet deleted');
+      notify('success', 'Bin deleted');
     },
     [drafts, notify, startNew],
   );
@@ -455,7 +460,7 @@ export function App() {
         onLogout={onLogout}
       />
 
-      {loading && <div className="loading-bar" role="progressbar" aria-label="Loading snippet" />}
+      {loading && <div className="loading-bar" role="progressbar" aria-label="Loading bin" />}
 
       {drafts.offer && (
         <DraftBanner
@@ -530,7 +535,7 @@ export function App() {
           entries={consoleLog.entries}
           counts={consoleLog.counts}
           onClear={consoleLog.clear}
-          onClose={() => setShowConsole(false)}
+          onClose={closeConsole}
         />
       )}
 

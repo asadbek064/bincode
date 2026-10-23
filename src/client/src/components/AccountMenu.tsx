@@ -28,6 +28,13 @@ export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLo
   ];
 
   const onMenuKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // A menu is one Tab stop: arrows move inside it, Tab closes it back to the avatar.
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      setOpen(false);
+      anchorRef.current?.focus();
+      return;
+    }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
     e.preventDefault();
     const buttons = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
@@ -62,6 +69,7 @@ export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLo
         anchorRef={anchorRef}
         align="end"
         label="Account"
+        role="none"
         className="account-menu"
       >
         <p className="account-email" title={user.email}>
@@ -73,9 +81,12 @@ export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLo
               key={item.label}
               type="button"
               role="menuitem"
+              tabIndex={-1}
               className="account-item"
               onClick={() => {
                 setOpen(false);
+                // Back to the avatar first, so a modal opened by the item returns focus there.
+                anchorRef.current?.focus();
                 item.run();
               }}
             >

@@ -48,7 +48,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 function fallbackMessage(status: number): string {
   if (status === 0) return 'Network error. Check your connection.';
   if (status === 404) return 'Not found.';
-  if (status === 413) return 'Snippet is too large.';
+  if (status === 413) return 'Bin is too large.';
   if (status === 429) return 'Too many requests. Please wait a moment.';
   if (status >= 500) return 'Server error. Please try again.';
   return `Request failed (${status}).`;
@@ -108,7 +108,7 @@ export const getSnippet = (shareId: string, unlockToken?: string | null) =>
 /** For the owner's own bins, which are never locked. */
 export async function getOwnSnippet(shareId: string): Promise<Snippet> {
   const res = await getSnippet(shareId);
-  if ('locked' in res) throw new ApiError(403, 'You do not own this snippet.');
+  if ('locked' in res) throw new ApiError(403, 'You do not own this bin.');
   return res;
 }
 

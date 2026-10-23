@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConsoleCounts } from '../hooks/useConsoleLog.ts';
-import type { ConsoleEntry } from '../lib/consoleTypes.ts';
+import type { ConsoleEntry, ConsoleLevel } from '../lib/consoleTypes.ts';
 import { CloseIcon } from './Icons.tsx';
 import './ConsoleDrawer.css';
 
@@ -22,6 +22,12 @@ const FILTERS: { value: Filter; label: string }[] = [
 // Within this many px of the bottom counts as "following" the output.
 const STICK_PX = 8;
 
+// Warnings and errors also differ by colour; the mark keeps them apart without it.
+const LEVEL_MARKS: Partial<Record<ConsoleLevel, { glyph: string; label: string }>> = {
+  warn: { glyph: '▲', label: 'Warning' },
+  error: { glyph: '✕', label: 'Error' },
+};
+
 function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -31,7 +37,25 @@ function formatTime(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function ConsoleDrawer({ entries, counts, onClear, onClose }: ConsoleDrawerProps) {
+// Entries are immutable, so a row only renders once even as the log keeps growing.
+const ConsoleRow = memo(function ConsoleRow({ entry }: { entry: ConsoleEntry }) {
+  const mark = LEVEL_MARKS[entry.level];
+  return (
+    <div className={`console-row console-${entry.level}`}>
+      <time className="console-time">{formatTime(entry.time)}</time>
+      <span className="console-mark" aria-hidden="true">
+        {mark?.glyph}
+      </span>
+      <span className="console-text">
+        {mark && <span className="visually-hidden">{mark.label}: </span>}
+        {entry.text}
+      </span>
+    </div>
+  );
+});
+
+// Memoised: App re-renders on every keystroke, the drawer only needs to when the log changes.
+export const ConsoleDrawer = memo(function ConsoleDrawer({ entries, counts, onClear, onClose }: ConsoleDrawerProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -92,14 +116,9 @@ export function ConsoleDrawer({ entries, counts, onClear, onClose }: ConsoleDraw
           <div className="console-empty">No console output</div>
         ) : (
           // Text comes from untrusted snippet code: rendered as React text, never as HTML.
-          visible.map((e) => (
-            <div key={e.id} className={`console-row console-${e.level}`}>
-              <time className="console-time">{formatTime(e.time)}</time>
-              <span className="console-text">{e.text}</span>
-            </div>
-          ))
+          visible.map((e) => <ConsoleRow key={e.id} entry={e} />)
         )}
       </div>
     </section>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 interface PopoverProps {
@@ -9,6 +9,8 @@ interface PopoverProps {
   /** which edge of the anchor the panel lines up with */
   align?: 'start' | 'end';
   label: string;
+  /** 'none' when the content brings its own popup role (the account menu's role="menu") */
+  role?: 'dialog' | 'none';
   className?: string;
   children: ReactNode;
 }
@@ -17,10 +19,37 @@ interface PopoverProps {
  * A small panel anchored under a button. The anchor's parent must be `position: relative`
  * (the `.popover-anchor` class). Closes on outside click and Escape, returning focus to the anchor.
  */
-export function Popover({ open, onClose, anchorRef, align = 'start', label, className, children }: PopoverProps) {
+export function Popover({
+  open,
+  onClose,
+  anchorRef,
+  align = 'start',
+  label,
+  role = 'dialog',
+  className,
+  children,
+}: PopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+
+  // Short screens (a landscape phone, an open keyboard) would cut the panel's bottom off, and the
+  // page itself doesn't scroll; cap it to the space below the anchor and let it scroll instead.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !panel) return;
+    const fit = () => {
+      const viewport = window.visualViewport?.height ?? window.innerHeight;
+      panel.style.maxHeight = `${Math.max(120, viewport - panel.getBoundingClientRect().top - 8)}px`;
+    };
+    fit();
+    window.visualViewport?.addEventListener('resize', fit);
+    window.addEventListener('resize', fit);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', fit);
+      window.removeEventListener('resize', fit);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -50,8 +79,8 @@ export function Popover({ open, onClose, anchorRef, align = 'start', label, clas
   return (
     <div
       ref={panelRef}
-      role="dialog"
-      aria-label={label}
+      role={role}
+      aria-label={role === 'dialog' ? label : undefined}
       className={`popover popover-${align}${className ? ` ${className}` : ''}`}
     >
       {children}

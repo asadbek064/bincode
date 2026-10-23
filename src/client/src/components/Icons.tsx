@@ -3,14 +3,17 @@ import type { SVGProps } from 'react';
 type IconProps = SVGProps<SVGSVGElement>;
 
 // Material Symbols paths on a 960-unit grid, shifted so the viewBox starts at 0.
+// Decorative unless given an aria-label, which turns it into a labelled image.
 function MaterialIcon({ d, ...props }: IconProps & { d: string }) {
+  const labelled = props['aria-label'] !== undefined;
   return (
     <svg
       viewBox="0 -960 960 960"
       width="1em"
       height="1em"
       fill="currentColor"
-      aria-hidden="true"
+      aria-hidden={labelled ? undefined : true}
+      role={labelled ? 'img' : undefined}
       focusable="false"
       {...props}
     >
@@ -124,34 +127,6 @@ export const CloseIcon = (props: IconProps) => (
     {...props}
     d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
   />
-);
-
-// Language marks keep their brand colors; they are identifiers, not UI chrome.
-export const HtmlIcon = (props: IconProps) => (
-  <svg viewBox="0 0 32 32" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
-    <path
-      fill="#E65100"
-      d="m4 4 2 22 10 2 10-2 2-22Zm19.72 7H11.28l.29 3h11.86l-.802 9.335L15.99 25l-6.635-1.646L8.93 19h3.02l.19 2 3.86.77 3.84-.77.29-4H8.84L8 8h16Z"
-    />
-  </svg>
-);
-
-export const CssIcon = (props: IconProps) => (
-  <svg viewBox="0 0 32 32" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
-    <path
-      fill="#42a5f5"
-      d="m29.18 4-3.57 18.36-.33 1.64-4.74 1.57-3.28 1.09L13.21 28 2.87 24.05 4.05 18h4.2l-.44 2.85 6.34 2.42.78-.26 6.52-2.16.17-.83.79-4.02H4.44l.74-3.76.05-.24h17.96l.78-4H6l.78-4z"
-    />
-  </svg>
-);
-
-export const JsIcon = (props: IconProps) => (
-  <svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" focusable="false" {...props}>
-    <path
-      fill="#ffca28"
-      d="M2 2h12v12H2zm3.153 10.027c.267.567.794 1.033 1.694 1.033 1 0 1.686-.533 1.686-1.7V7.507H7.4v3.827c0 .573-.233.72-.6.72-.387 0-.547-.267-.727-.58zm3.987-.12c.333.653 1.007 1.153 2.06 1.153 1.067 0 1.867-.553 1.867-1.573 0-.94-.54-1.36-1.5-1.773l-.28-.12c-.487-.207-.694-.347-.694-.68 0-.274.207-.487.54-.487.32 0 .534.14.727.487l.873-.58c-.366-.64-.886-.887-1.6-.887-1.006 0-1.653.64-1.653 1.487 0 .92.54 1.353 1.353 1.7l.28.12c.52.226.827.366.827.753 0 .32-.3.553-.767.553-.553 0-.873-.286-1.113-.686z"
-    />
-  </svg>
 );
 
 export const LockIcon = (props: IconProps) => (

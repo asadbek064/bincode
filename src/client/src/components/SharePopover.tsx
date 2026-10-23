@@ -43,7 +43,7 @@ export function SharePopover(props: SharePopoverProps) {
   const copy = async (id: string, vis: Visibility) => {
     const ok = await copyText(shareUrl(id));
     if (!ok) notify('error', 'Could not copy the link.');
-    else notify('success', vis === 'private' ? 'Link copied — only you can open it' : 'Snippet link copied to clipboard!');
+    else notify('success', vis === 'private' ? 'Link copied — only you can open it' : 'Link copied');
   };
 
   const onButton = () => {

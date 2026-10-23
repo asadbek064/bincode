@@ -42,7 +42,11 @@ export function Modal({ title, onClose, children, className }: ModalProps) {
       const firstItem = items[0];
       const lastItem = items[items.length - 1];
       if (!firstItem || !lastItem) return;
-      if (e.shiftKey && document.activeElement === firstItem) {
+      // Content that swaps (a form replaced by a list) can drop focus to <body>; pull it back in.
+      if (!dialog.contains(document.activeElement)) {
+        e.preventDefault();
+        (e.shiftKey ? lastItem : firstItem).focus();
+      } else if (e.shiftKey && document.activeElement === firstItem) {
         e.preventDefault();
         lastItem.focus();
       } else if (!e.shiftKey && document.activeElement === lastItem) {

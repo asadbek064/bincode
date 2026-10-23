@@ -3,7 +3,8 @@
 .console-drawer {
   display: flex;
   flex-direction: column;
-  height: 200px;
+  /* Capped so a landscape phone keeps room for the editor and preview. */
+  height: min(200px, 35dvh);
   flex-shrink: 0;
   border-top: 1px solid var(--border);
   background: var(--bg);
@@ -84,6 +85,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.console-mark {
+  flex-shrink: 0;
+  width: 0.7rem;
+  font-size: 10px;
+  line-height: 17px;
+  text-align: center;
+}
+
 .console-text {
   flex: 1;
   min-width: 0;
@@ -104,4 +113,11 @@
 .console-info,
 .console-debug {
   color: var(--text-muted);
+}
+
+/* The navbar toggle already says "Console"; the filters need the room. */
+@media (max-width: 480px) {
+  .console-title {
+    display: none;
+  }
 }

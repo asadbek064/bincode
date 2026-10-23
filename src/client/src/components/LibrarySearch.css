@@ -12,7 +12,7 @@
 
 .lib-search-results {
   list-style: none;
-  max-height: 320px;
+  max-height: min(320px, 45dvh);
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);

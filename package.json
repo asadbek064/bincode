@@ -4,6 +4,7 @@
   "description": "A minimalist, self-hostable code playground (JSFiddle alternative)",
   "type": "module",
   "private": true,
+  "author": "Asadbek <contact@asadk.dev> (https://www.asadk.dev/)",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.13"
