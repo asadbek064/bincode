@@ -303,6 +303,40 @@ export function App() {
     setModal(null);
   }, [dispatch, logout]);
 
+  const onExport = useCallback(async () => {
+    try {
+      const blob = await api.exportBackup();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bincode-backup-${new Date().toISOString().slice(0, 10)}.json.br`;
+      a.click();
+      // Give the download a moment to start before freeing the blob.
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      notify('success', 'Backup downloaded. It includes password hashes, so keep it private.');
+    } catch (err) {
+      notify('error', `Export failed: ${errorMessage(err, 'unknown error')}`);
+    }
+  }, [notify]);
+
+  const onImport = useCallback(
+    async (file: File) => {
+      try {
+        const r = await api.importBackup(file);
+        const extra = [r.bins.skipped && `${r.bins.skipped} skipped`, r.bins.newLinks && `${r.bins.newLinks} new link${r.bins.newLinks === 1 ? '' : 's'}`]
+          .filter(Boolean)
+          .join(', ');
+        notify(
+          'success',
+          `Imported ${r.bins.imported} bin${r.bins.imported === 1 ? '' : 's'}${extra ? ` (${extra})` : ''} and ${r.collections.imported} collection${r.collections.imported === 1 ? '' : 's'}.`,
+        );
+      } catch (err) {
+        notify('error', `Import failed: ${errorMessage(err, 'unknown error')}`);
+      }
+    },
+    [notify],
+  );
+
   const onNew = useCallback(() => {
     const s = stateRef.current;
     if (!s.current && s.dirty && !window.confirm('Discard your unsaved bin and start a new one?')) return;
@@ -458,6 +492,8 @@ export function App() {
         onFork={() => void save(true)}
         onLogin={() => setModal({ type: 'login' })}
         onLogout={onLogout}
+        onExport={() => void onExport()}
+        onImport={(file) => void onImport(file)}
       />
 
       {loading && <div className="loading-bar" role="progressbar" aria-label="Loading bin" />}

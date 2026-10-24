@@ -101,6 +101,25 @@ const MIGRATIONS: Migration[] = [
   CREATE INDEX snippets_expires ON snippets (expires_at) WHERE expires_at IS NOT NULL;
   `,
   },
+  // 3: remember every shareId that was ever deleted, so a backup import can't take over a link that
+  // belonged to someone else. Triggers also catch burn, the expiry sweep and user-deletion cascades.
+  {
+    sql: `
+  CREATE TABLE retired_share_ids (
+    share_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('snippet', 'collection'))
+  );
+
+  CREATE TRIGGER retire_snippet_share_id AFTER DELETE ON snippets BEGIN
+    INSERT OR IGNORE INTO retired_share_ids (share_id, user_id, kind) VALUES (OLD.share_id, OLD.user_id, 'snippet');
+  END;
+
+  CREATE TRIGGER retire_collection_share_id AFTER DELETE ON collections BEGIN
+    INSERT OR IGNORE INTO retired_share_ids (share_id, user_id, kind) VALUES (OLD.share_id, OLD.user_id, 'collection');
+  END;
+  `,
+  },
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

@@ -1,6 +1,6 @@
 // Server-side validation schemas. The client only imports types/constants, so zod stays out of the bundle.
 import { z } from 'zod';
-import { DEFAULT_TITLE, EXPIRATION_KEYS, LIMITS, VISIBILITIES } from './constants.ts';
+import { DEFAULT_TITLE, EXPIRATION_KEYS, LIMITS, SHARE_ID_PATTERN, VISIBILITIES } from './constants.ts';
 
 export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(LIMITS.emailMax));
 
@@ -78,4 +78,56 @@ export const unlockSchema = z.object({
 /** Burn-only bins are opened without a password. */
 export const unlockSnippetSchema = z.object({
   password: z.string().min(1).max(LIMITS.passwordMax).optional(),
+});
+
+// --- Backup files -------------------------------------------------------------------------------
+
+/**
+ * Imported hashes are used by bcrypt.compare on every unlock, and the work factor lives in the hash:
+ * only accept well-formed hashes with factor 4–15, or one unlock could pin the CPU for hours.
+ */
+const bcryptHashSchema = z.string().regex(/^\$2[aby]\$(0[4-9]|1[0-5])\$[./A-Za-z0-9]{53}$/, 'Invalid password hash');
+const shareIdSchema = z.string().regex(SHARE_ID_PATTERN);
+const isoSchema = z.iso.datetime();
+
+const backupBinSchema = z
+  .object({
+    shareId: shareIdSchema,
+    title: titleSchema,
+    html: codeSchema,
+    css: codeSchema,
+    js: codeSchema,
+    visibility: visibilitySchema,
+    passwordHash: bcryptHashSchema.nullable(),
+    expiresAt: isoSchema.nullable(),
+    burnAfterRead: z.boolean(),
+    forkedFrom: shareIdSchema.nullable(),
+    createdAt: isoSchema,
+    updatedAt: isoSchema,
+  })
+  .superRefine((b, ctx) => {
+    checkCodeSize(b, ctx);
+    if ((b.visibility === 'password') !== (b.passwordHash !== null)) {
+      ctx.addIssue({ code: 'custom', path: ['passwordHash'], message: 'Password bins need a hash; others must not have one' });
+    }
+  });
+
+const backupCollectionSchema = z.object({
+  shareId: shareIdSchema,
+  title: titleSchema,
+  description: z.string().max(LIMITS.descriptionMax),
+  passwordHash: bcryptHashSchema.nullable(),
+  createdAt: isoSchema,
+  updatedAt: isoSchema,
+  bins: z.array(shareIdSchema).max(5_000),
+});
+
+const noDuplicates = (items: { shareId: string }[]) => new Set(items.map((i) => i.shareId)).size === items.length;
+
+export const backupFileSchema = z.object({
+  format: z.literal('bincode-backup'),
+  version: z.literal(1),
+  exportedAt: isoSchema,
+  bins: z.array(backupBinSchema).max(5_000).refine(noDuplicates, 'Duplicate bin shareId'),
+  collections: z.array(backupCollectionSchema).max(200).refine(noDuplicates, 'Duplicate collection shareId'),
 });

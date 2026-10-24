@@ -14,9 +14,11 @@ import {
   type Quotas,
   type RateLimits,
 } from './middleware/security.ts';
+import { createBackupRepo } from './repos/backup.ts';
 import { createCollectionsRepo } from './repos/collections.ts';
 import { createSnippetsRepo } from './repos/snippets.ts';
 import { createUsersRepo } from './repos/users.ts';
+import { accountRouter } from './routes/account.ts';
 import { authRouter } from './routes/auth.ts';
 import { collectionsRouter } from './routes/collections.ts';
 import { snippetsRouter } from './routes/snippets.ts';
@@ -90,6 +92,10 @@ export function createApp({ db, config, clientDir: rawClientDir, limits, quotas 
       writeLimiter: limiters.writes,
       unlockLimiters: [limiters.unlock, limiters.unlockTarget],
     }),
+  );
+  api.use(
+    '/account',
+    accountRouter({ backup: createBackupRepo(db), quotas: quota, requireAuth, backupLimiter: limiters.backup }),
   );
   api.use(notFound);
   app.use('/api', api);

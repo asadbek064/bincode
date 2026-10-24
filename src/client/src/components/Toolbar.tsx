@@ -42,6 +42,8 @@ export interface ToolbarProps {
   onFork: () => void;
   onLogin: () => void;
   onLogout: () => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
   /** the Share button; `user` and `dirty` are filled in from the props above */
   share: Omit<SharePopoverProps, 'user' | 'dirty'>;
 }
@@ -215,6 +217,8 @@ export function Toolbar(props: ToolbarProps) {
             onOpenSnippets={props.onOpenSnippets}
             onNew={props.onNew}
             onFork={props.onFork}
+            onExport={props.onExport}
+            onImport={props.onImport}
             onLogout={props.onLogout}
           />
         ) : (

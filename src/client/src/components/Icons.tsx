@@ -198,3 +198,17 @@ export const LogoutIcon = (props: IconProps) => (
     d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h280v80H200v560h280v80H200Zm440-160-55-58 102-102H360v-80h327L585-622l55-58 200 200-200 200Z"
   />
 );
+
+export const DownloadIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"
+  />
+);
+
+export const UploadIcon = (props: IconProps) => (
+  <MaterialIcon
+    {...props}
+    d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"
+  />
+);

@@ -25,7 +25,7 @@ src/server/
   config.ts          loadConfig() (full) and loadDbConfig() (no JWT; used by add-user)
   db.ts              openDb(file | ':memory:') + base schema + PRAGMA user_version migrations
   repos/             users.ts (DuplicateEmailError), snippets.ts (toSnippet/toSummary DTO mapping),
-                     collections.ts (membership, password_version)
+                     collections.ts (membership, password_version), backup.ts (export / transactional import)
   middleware/
     auth.ts          createAuth(config, users) → { requireAuth, optionalAuth }; signToken(config, userId);
                      signUnlockToken / hasUnlockToken (bin and collection unlock tokens)
@@ -33,7 +33,7 @@ src/server/
     error.ts         HttpError, notFound, errorHandler
     security.ts      securityHeaders() (app vs preview CSP), noStore, createRateLimiters(limits),
                      Quotas / DEFAULT_QUOTAS
-  routes/            auth.ts, snippets.ts, collections.ts
+  routes/            auth.ts, snippets.ts, collections.ts, account.ts (backup export / import)
 src/client/
   index.html         Vite entry (no inline scripts — strict CSP)
   public/            Copied as-is: preview.html, logo/ (emerald </> mark + favicons)
@@ -48,7 +48,7 @@ src/client/
                      CollectionView (collection password gate), DraftBanner, Toast
     hooks/           useAuth, useSnippetEditor, useLocalDraft, useKeyboardShortcuts,
                      useColorScheme, useDebouncedValue, useConsoleLog
-    lib/             api (typed fetch client, ApiError), previewDoc (+ CONSOLE_BRIDGE), consoleTypes,
+    lib/             api (typed fetch client, ApiError, exportBackup / importBackup), previewDoc (+ CONSOLE_BRIDGE), consoleTypes,
                      monaco (workers, bincode-light / bincode-dark themes),
                      drafts, storage (safe localStorage), unlockTokens (sessionStorage),
                      binSettings (labels, pending settings), cdnjs (search, tagFor, insertTag),
@@ -105,6 +105,7 @@ Behaviours worth knowing:
 | `loginEmail` | 20 failures / hour | normalized email | `POST /api/auth/login` (stops distributed guessing; can lock one account out) |
 | `unlock` | 10 failures / 15 min | IP | `POST /api/{snippets,collections}/:id/unlock` |
 | `unlockTarget` | 30 failures / hour | `baseUrl` + shareId | same (stops distributed guessing; owners never need to unlock) |
+| `backup` | 10/hour | user id | `GET /api/account/export`, `POST /api/account/import` |
 | `writes` | 60/min | user id | every POST/PUT/DELETE on snippets and collections (after `requireAuth`) |
 
 Quotas (`DEFAULT_QUOTAS`, 403 when exceeded): 5,000 bins, 200 collections and 50M characters of code per account. Storage is checked on create/fork and on PUT (net growth), and counts expired rows until the sweep removes them.
@@ -118,8 +119,14 @@ Custom key generators that fall back to the IP must call `ipKeyGenerator(req.ip)
 - `snippets(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, html, css, js, visibility CHECK IN ('unlisted','password','private'), password_hash, password_version, expires_at, burn_after_read, forked_from → snippets ON DELETE SET NULL, created_at, updated_at, CHECK ((visibility = 'password') = (password_hash IS NOT NULL)))`
 - `collections(id, share_id UNIQUE, user_id → users ON DELETE CASCADE, title, description, password_hash NULL, password_version, created_at, updated_at)`
 - `collection_snippets(collection_id → collections CASCADE, snippet_id → snippets CASCADE, added_at, PK(collection_id, snippet_id))` — many-to-many
+- `retired_share_ids(share_id PK, user_id, kind)` — filled by `AFTER DELETE` triggers on `snippets` / `collections` (so delete, burn, the expiry sweep and user-deletion cascades all count); backup import uses it to never take over someone else's dead link.
 - The internal `id`s and password hashes never leave the server. Clients only see `shareId` (10-char nanoid); `forkedFrom` is the source's `shareId`.
 - Migrations: `SCHEMA` in `db.ts` is v0 (`CREATE TABLE IF NOT EXISTS`); `MIGRATIONS[i]` upgrades to version `i + 1`, each in a transaction, tracked in `PRAGMA user_version`. Append new entries; never edit one that shipped. SQLite can't alter constraints, so a changed CHECK needs a table rebuild: mark the entry `rebuild: true` and `migrate()` turns foreign keys off around it (outside the transaction, as SQLite requires) and runs `PRAGMA foreign_key_check` before committing (migration 2 is the example). `test/migration.test.ts` upgrades real v0 and v1 files.
+
+### Backup (export / import)
+- Account menu → **Export backup** downloads `bincode-backup-YYYY-MM-DD.json.br`: Brotli-compressed `BackupFile` JSON (`src/shared/api.ts`) with every non-expired bin (code, settings, **password hashes**, `forkedFrom`, timestamps) and every collection with members. No internal ids or user ids. Compressing this file download is fine despite the BREACH rule below: it's an authenticated GET of the user's own data with no reflected input.
+- **Import backup…** accepts `.json.br` or plain `.json` (first non-whitespace byte `{`), `application/octet-stream`, ≤ 25 MB upload, ≤ 64 MiB decompressed (`maxOutputLength`, else 413). `backupFileSchema` validates everything; bcrypt hashes must have work factor **4–15** (the factor is inside the hash, and a factor-31 hash would pin the CPU for hours per unlock).
+- `importFor` runs in one transaction (all-or-nothing). Per item: already the importer's → skipped; shareId live under, or retired by, another user → new shareId; otherwise the original shareId is reused (old links keep working). Quotas are checked after inserting and roll everything back on breach. Fork links resolve through the file first, then existing bins. Memberships use `INSERT OR IGNORE`, so re-importing fills in missing ones.
 
 ### Preview isolation (security-critical)
 - The preview is `<iframe src="/preview.html" sandbox="allow-scripts allow-modals allow-forms allow-popups">` — **never add `allow-same-origin`**; the opaque origin is what stops snippet code from reading the app's `localStorage` token.
@@ -162,7 +169,7 @@ Also `createCollection(t, email, body?)` and `addToCollection(t, email, collecti
 
 `makeApp({ quotas })` lowers quotas for tests.
 
-Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `security.test.ts` (no-store, preview sandbox, body caps, quotas, access matrix, forged tokens, IDOR, mass assignment), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `cdnjs.test.ts` (CDNJS response mapping, tag building, no duplicates), `previewDoc.test.ts` (unit test of the client's pure preview builder — `previewDoc.ts` is imported by a server-side test, so it must stay DOM-free — the server tsconfig has no DOM lib).
+Test files: `auth.test.ts`, `snippets.test.ts`, `fork.test.ts`, `visibility.test.ts`, `bins.test.ts` (password, burn, expiry, unlock limits), `security.test.ts` (no-store, preview sandbox, body caps, quotas, access matrix, forged tokens, IDOR, mass assignment), `collections.test.ts`, `migration.test.ts`, `http.test.ts` (headers, static, 404/400 JSON), `backup.test.ts` (round trip, idempotent re-import, link guard, hash / bomb / quota validation), `cdnjs.test.ts` (CDNJS response mapping, tag building, no duplicates), `previewDoc.test.ts` (unit test of the client's pure preview builder — `previewDoc.ts` is imported by a server-side test, so it must stay DOM-free — the server tsconfig has no DOM lib).
 
 ## Gotchas
 - `node:sqlite` is flagged experimental; scripts pass `--disable-warning=ExperimentalWarning`.

@@ -165,3 +165,58 @@ export interface ApiErrorBody {
  * Private snippets, expired snippets and owner-only collections answer 404 to everyone but the owner.
  * Errors always use ApiErrorBody.
  */
+
+/** A user's full backup: GET /api/account/export (Brotli-compressed JSON), POST /api/account/import. */
+export interface BackupBin {
+  shareId: string;
+  title: string;
+  html: string;
+  css: string;
+  js: string;
+  visibility: Visibility;
+  /** bcrypt hash; present exactly when visibility is 'password' */
+  passwordHash: string | null;
+  expiresAt: string | null;
+  burnAfterRead: boolean;
+  forkedFrom: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupCollection {
+  shareId: string;
+  title: string;
+  description: string;
+  passwordHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** shareIds of member bins */
+  bins: string[];
+}
+
+export interface BackupFile {
+  format: 'bincode-backup';
+  version: 1;
+  exportedAt: string;
+  bins: BackupBin[];
+  collections: BackupCollection[];
+}
+
+interface ImportCounts {
+  imported: number;
+  /** already in the account, left untouched */
+  skipped: number;
+  /** imported under a new link because the original belongs (or belonged) to someone else */
+  newLinks: number;
+}
+
+export interface ImportSummary {
+  bins: ImportCounts;
+  collections: ImportCounts;
+  memberships: number;
+}
+
+/*
+ *   GET    /api/account/export             (auth)                  -> 200 application/octet-stream (BackupFile, Brotli)
+ *   POST   /api/account/import             (auth) BackupFile (.json.br or .json, octet-stream) -> 200 ImportSummary
+ */

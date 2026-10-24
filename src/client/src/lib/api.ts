@@ -5,6 +5,7 @@ import type {
   CollectionResponse,
   CollectionSummary,
   CreateSnippetRequest,
+  ImportSummary,
   LoginResponse,
   MeResponse,
   Snippet,
@@ -54,9 +55,23 @@ function fallbackMessage(status: number): string {
   return `Request failed (${status}).`;
 }
 
-async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+interface RequestOptions {
+  /** sent as-is (application/octet-stream) instead of JSON */
+  rawBody?: Blob;
+  /** resolve to the response body as a Blob instead of parsed JSON */
+  blob?: boolean;
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders?: Record<string, string>,
+  opts: RequestOptions = {},
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: opts.blob ? '*/*' : 'application/json', ...extraHeaders };
+  if (opts.rawBody) headers['Content-Type'] = 'application/octet-stream';
+  else if (body !== undefined) headers['Content-Type'] = 'application/json';
   const sentToken = authToken;
   if (sentToken) headers.Authorization = `Bearer ${sentToken}`;
 
@@ -65,13 +80,14 @@ async function request<T>(method: string, path: string, body?: unknown, extraHea
     res = await fetch(`/api${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: opts.rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
     });
   } catch {
     throw new ApiError(0, fallbackMessage(0));
   }
 
   if (res.status === 204) return undefined as T;
+  if (res.ok && opts.blob) return (await res.blob()) as T;
 
   let data: unknown = null;
   try {
@@ -153,3 +169,10 @@ export const removeFromCollection = (shareId: string, snippetShareId: string) =>
 
 export const unlockCollection = (shareId: string, password: string) =>
   request<UnlockResponse>('POST', `${collectionPath(shareId)}/unlock`, { password });
+
+/** The user's full backup (Brotli-compressed JSON), as a Blob to download. */
+export const exportBackup = () => request<Blob>('GET', '/account/export', undefined, undefined, { blob: true });
+
+/** Restores a backup file (.json.br or .json); existing bins and collections are skipped. */
+export const importBackup = (file: Blob) =>
+  request<ImportSummary>('POST', '/account/import', undefined, undefined, { rawBody: file });

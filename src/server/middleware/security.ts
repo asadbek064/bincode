@@ -74,6 +74,8 @@ export interface RateLimits {
   unlock?: number;
   /** failed unlocks per hour, per bin or collection (across all IPs) */
   unlockTarget?: number;
+  /** backup exports + imports per hour, per user */
+  backup?: number;
   /** mutations (POST/PUT/DELETE) per minute, per user */
   writes?: number;
 }
@@ -131,6 +133,12 @@ export function createRateLimiters(limits: RateLimits = {}) {
       keyGenerator: (req) => `${req.baseUrl}:${String(req.params.shareId)}`,
     }),
     // Must run after requireAuth; keyed per account so one user can't flood the database.
+    // Must run after requireAuth. Exports compress everything the user owns, imports rewrite it.
+    backup: limiter({
+      windowMs: 60 * 60_000,
+      limit: limits.backup ?? 10,
+      keyGenerator: (req) => (req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip ?? '')}`),
+    }),
     writes: limiter({
       windowMs: 60_000,
       limit: limits.writes ?? 60,

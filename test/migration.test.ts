@@ -98,3 +98,10 @@ test('a v1 database with collections and forks survives the snippets rebuild', (
   assert.throws(() => db.prepare("UPDATE snippets SET password_hash = 'h' WHERE id = 's2'").run());
   db.close();
 });
+
+test('migration 3 adds retired share ids with delete triggers', () => {
+  const db = openDb(':memory:');
+  const names = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger') ORDER BY name").all() as { name: string }[]).map((r) => r.name);
+  for (const n of ['retired_share_ids', 'retire_snippet_share_id', 'retire_collection_share_id']) assert.ok(names.includes(n), n);
+  db.close();
+});

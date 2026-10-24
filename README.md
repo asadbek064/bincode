@@ -11,6 +11,7 @@ A self-hostable JSFiddle alternative: write HTML/CSS/JS, see a live preview, sha
 - Self-destruct after the first view, or after 10 minutes to a month
 - Collections to group bins, optionally shared by link + password
 - Fork any bin you can open; unsaved work is kept as a local draft
+- Back up everything you own (bins, settings, collections) to one file from the account menu, and import it back; links are preserved
 
 No sign-ups: accounts are created from the CLI. Anyone can view shared bins; only users can save.
 

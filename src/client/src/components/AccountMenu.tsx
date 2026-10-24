@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { User } from '../../../shared/api.ts';
-import { ForkIcon, ListIcon, LogoutIcon, PlusIcon } from './Icons.tsx';
+import { DownloadIcon, ForkIcon, ListIcon, LogoutIcon, PlusIcon, UploadIcon } from './Icons.tsx';
 import { Popover } from './Popover.tsx';
 
 export interface AccountMenuProps {
@@ -11,19 +11,25 @@ export interface AccountMenuProps {
   onOpenSnippets: () => void;
   onNew: () => void;
   onFork: () => void;
+  onExport: () => void;
+  /** a backup file was picked */
+  onImport: (file: File) => void;
   onLogout: () => void;
 }
 
 /** The avatar in the navbar and its menu. */
-export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLogout }: AccountMenuProps) {
+export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onExport, onImport, onLogout }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const items = [
     { label: 'My bins', icon: <ListIcon />, run: onOpenSnippets },
     { label: 'New bin', icon: <PlusIcon />, run: onNew },
     ...(canFork ? [{ label: 'Fork', icon: <ForkIcon />, run: onFork }] : []),
+    { label: 'Export backup', icon: <DownloadIcon />, run: onExport },
+    { label: 'Import backup…', icon: <UploadIcon />, run: () => fileRef.current?.click() },
     { label: 'Sign out', icon: <LogoutIcon />, run: onLogout },
   ];
 
@@ -51,6 +57,18 @@ export function AccountMenu({ user, canFork, onOpenSnippets, onNew, onFork, onLo
 
   return (
     <div className="popover-anchor">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".br,.json,application/json,application/octet-stream"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Reset so picking the same file again still fires change.
+          e.target.value = '';
+          if (file) onImport(file);
+        }}
+      />
       <button
         ref={anchorRef}
         type="button"
